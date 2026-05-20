@@ -24,7 +24,7 @@ function AuthFormComponent() {
 
     try {
       if (isSignUp) {
-        // 1. РЕЄСТРАЦІЯ У СИСТЕМІ AUTH
+        // 1. РЕЄСТРАЦІЯ В AUTH ТА ПЕРЕДАЧА МЕТАДАНИХ ДЛЯ ТРИГЕРА
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -38,23 +38,29 @@ function AuthFormComponent() {
         });
         if (error) throw error;
 
-        // 2. ПІДСТРАХУВАЛЬНИЙ ПРЯМИЙ ЗАПИС У ТАБЛИЦЮ PROFILES
+        // 2. ПРЯМА ПІДСТРАХОВКА: Оскільки RLS може блокувати upsert, робимо звичайний insert
         if (data?.user) {
-          await supabase
+          const { error: profileError } = await supabase
             .from('profiles')
-            .upsert({
-              id: data.user.id,
-              nickname: nickname.trim(),
-              real_name: realName.trim(),
-              real_surname: realSurname.trim(),
-              elo: 1000,
-              role: 'user'
-            });
+            .insert([
+              {
+                id: data.user.id,
+                nickname: nickname.trim(),
+                real_name: realName.trim(),
+                real_surname: realSurname.trim(),
+                elo: 1000,
+                role: 'user'
+              }
+            ]);
+            
+          // Якщо виникла помилка унікальності (бо тригер уже вставив запис), ми її просто ігноруємо
+          if (profileError && !profileError.message.includes('duplicate key')) {
+            console.error('Помилка підстраховки профілю:', profileError);
+          }
         }
 
-        alert('Акаунт створено успішно! Тепер увійдіть під своїми даними.');
+        alert('Акаунт створено успішно! Тепер увійдіть у додаток.');
         setIsSignUp(false);
-        // Очищення полів
         setNickname(''); setRealName(''); setRealSurname(''); setEmail(''); setPassword('');
       } else {
         // ВХІД
@@ -74,7 +80,6 @@ function AuthFormComponent() {
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-black select-none touch-manipulation">
       <div className="w-full max-w-sm space-y-8 animate-in fade-in duration-700">
         
-        {/* ЗАГОЛОВОК */}
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-black text-white uppercase tracking-tighter italic drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
             {isSignUp ? 'РЕЄСТРАЦІЯ' : 'ВХІД'}
@@ -85,12 +90,8 @@ function AuthFormComponent() {
         </div>
 
         <form onSubmit={handleAuth} className="space-y-3">
-          
-          {/* ПОЛЯ ТІЛЬКИ ДЛЯ РЕЄСТРАЦІЇ */}
           {isSignUp && (
             <div className="space-y-3 animate-in slide-in-from-top-4 duration-500">
-              
-              {/* НІКНЕЙМ */}
               <div className="relative">
                 <Tag className="absolute left-4 top-4 text-blue-500" size={18} />
                 <input 
@@ -103,7 +104,6 @@ function AuthFormComponent() {
                 />
               </div>
 
-              {/* СПРАВЖНЄ ІМ'Я ТА ПРІЗВИЩЕ */}
               <div className="flex gap-2">
                 <div className="relative w-1/2">
                   <User className="absolute left-4 top-4 text-emerald-500" size={18} />
@@ -130,7 +130,6 @@ function AuthFormComponent() {
             </div>
           )}
 
-          {/* ПОЛЯ ДЛЯ EMAIL ТА ПАРОЛЮ */}
           <div className="relative">
             <Mail className="absolute left-4 top-4 text-zinc-600" size={18} />
             <input 
@@ -155,7 +154,6 @@ function AuthFormComponent() {
             />
           </div>
 
-          {/* КНОПКА ДІЇ */}
           <button 
             type="submit" 
             disabled={loading}
@@ -166,7 +164,6 @@ function AuthFormComponent() {
           </button>
         </form>
 
-        {/* ПЕРЕМИКАЧ РЕЖИМІВ */}
         <div className="text-center pt-4">
           <button 
             onClick={() => {
