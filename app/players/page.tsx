@@ -1,4 +1,5 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Trophy, Award, Search, User } from 'lucide-react';
@@ -11,6 +12,7 @@ export default function PlayersRatingPage() {
   useEffect(() => {
     const fetchRating = async () => {
       try {
+        // Завантажуємо профілі, відсортовані за рейтингом Elo від більшого до меншого
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -28,16 +30,17 @@ export default function PlayersRatingPage() {
     fetchRating();
   }, []);
 
+  // Фільтрація гравців через пошуковий рядок
   const filteredProfiles = profiles.filter(p => 
     (p.name || p.nickname || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (loading) {
-    return <div className="text-center p-10 text-zinc-500">Завантаження рейтингу гравців...</div>;
+    return <div className="text-center p-10 text-zinc-500 text-sm">Завантаження рейтингу гравців...</div>;
   }
 
   return (
-    <div className="p-6 max-w-md mx-auto space-y-6">
+    <div className="p-6 max-w-md mx-auto space-y-6 select-none touch-manipulation">
       
       {/* ЗАГОЛОВОК СТОРІНКИ */}
       <div>
@@ -53,7 +56,8 @@ export default function PlayersRatingPage() {
           placeholder="Знайти гравця за іменем..." 
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
-          className="w-full bg-zinc-950 border border-white/5 text-white rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition"
+          className="w-full bg-zinc-950 border border-white/5 text-white rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition h-12"
+          style={{ WebkitTapHighlightColor: 'transparent' }}
         />
       </div>
 
@@ -63,6 +67,7 @@ export default function PlayersRatingPage() {
           <p className="text-xs text-zinc-600 text-center py-10">Гравців не знайдено</p>
         ) : (
           filteredProfiles.map((player, index) => {
+            // Визначаємо медалі для ТОП-3 за індексом масиву
             const isFirst = index === 0;
             const isSecond = index === 1;
             const isThird = index === 2;
@@ -97,19 +102,26 @@ export default function PlayersRatingPage() {
                     )}
                   </div>
 
-                  {/* ІМ'Я ТА СТАТУС */}
+                  {/* ІМ'Я ТА ФІРМОВІ СТАТУСИ */}
                   <div className="flex flex-col">
                     <span className="text-sm font-bold text-white tracking-wide">
                       {player.nickname || player.name || 'Анонімний гравець'}
                     </span>
                     
-                    {isFirst ? (
+                    {/* Логіка статусів: 1, 2, 3 місця та пусті інші */}
+                    {index === 0 && (
                       <span className="text-blue-500 text-[9px] uppercase font-black tracking-widest mt-0.5">
                         Leader 🔥
                       </span>
-                    ) : (
-                      <span className="text-zinc-500 text-[9px] uppercase font-semibold tracking-wider mt-0.5">
-                        Гравець
+                    )}
+                    {index === 1 && (
+                      <span className="text-zinc-400 text-[9px] uppercase font-semibold tracking-wider mt-0.5">
+                        Екс-лідер
+                      </span>
+                    )}
+                    {index === 2 && (
+                      <span className="text-amber-600 text-[9px] uppercase font-medium tracking-wider mt-0.5 italic">
+                        теж не погано 🥉
                       </span>
                     )}
                   </div>
