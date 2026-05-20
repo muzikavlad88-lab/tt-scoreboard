@@ -4,60 +4,105 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { User, ChevronLeft, Trophy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { User, ChevronLeft } from 'lucide-react';
 
-export default function PublicPlayerProfile({ params }: { params: { id: string } }) {
+export default function PublicProfile({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [player, setPlayer] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchPlayer = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', params.id)
-        .single();
-      if (data) setPlayer(data);
-      setLoading(false);
-    };
-    fetchPlayer();
+    async function getPlayer() {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', params.id)
+          .single();
+        
+        if (error) throw error;
+        if (data) setPlayer(data);
+      } catch (err) {
+        console.error('Помилка завантаження профілю:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    getPlayer();
   }, [params.id]);
 
-  if (loading) return <div className="text-center p-10 text-zinc-500">Завантаження...</div>;
-  if (!player) return <div className="text-center p-10 text-zinc-500">Гравця не знайдено.</div>;
+  if (loading) {
+    return <div className="p-10 text-center text-zinc-500 text-sm">Завантаження профілю...</div>;
+  }
+
+  if (!player) {
+    return (
+      <div className="p-10 text-center text-zinc-500 text-sm space-y-4">
+        <p>Гравця не знайдено або дані ще не заповнені.</p>
+        <button 
+          onClick={() => router.push('/players')} 
+          className="text-blue-500 font-bold active:scale-95 transition-all text-xs"
+        >
+          Повернутись до рейтингу
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 max-w-md mx-auto space-y-6 select-none">
+    <div className="p-4 max-w-md mx-auto space-y-6 select-none touch-manipulation">
+      {/* КНОПКА НАЗАД */}
       <button 
-        onClick={() => router.push('/players')}
-        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-white transition"
+        onClick={() => router.push('/players')} 
+        className="flex items-center gap-1 text-zinc-500 hover:text-white transition-all text-xs py-2"
+        style={{ WebkitTapHighlightColor: 'transparent' }}
       >
         <ChevronLeft size={16} /> Назад до рейтингу
       </button>
 
-      {/* КАРТКА ПЕРЕГЛЯДУ ЧУЖОГО ПРОФІЛЮ */}
-      <div className="bg-zinc-950 border border-white/5 rounded-2xl p-6 flex flex-col items-center space-y-4 shadow-2xl">
-        <div className="w-20 h-20 bg-zinc-900 border border-white/10 rounded-2xl flex items-center justify-center text-zinc-600">
-          <User size={40} />
+      {/* КАРТКА ПУБЛІЧНОГО ПЕРЕГЛЯДУ */}
+      <div className="bg-zinc-950 border border-white/5 rounded-3xl p-6 flex flex-col items-center space-y-6 shadow-2xl">
+        
+        {/* АВАТАРКА ГРАВЦЯ */}
+        <div className="w-28 h-28 rounded-3xl bg-zinc-900 border border-white/10 overflow-hidden flex items-center justify-center">
+          {player.avatar_url ? (
+            <img src={player.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+          ) : (
+            <User size={40} className="text-zinc-700" />
+          )}
         </div>
 
-        <div className="text-center space-y-1">
-          {/* Головний — НІКНЕЙМ */}
-          <h2 className="text-xl font-black text-white tracking-wide">@{player.nickname}</h2>
+        {/* НІКНЕЙМ ТА ПІБ */}
+        <div className="text-center w-full space-y-4">
+          <h2 className="text-2xl font-black text-white tracking-wide italic">
+            @{player.nickname || 'anonym'}
+          </h2>
           
-          {/* Справжні дані видно ТІЛЬКИ ТУТ */}
-          <p className="text-sm font-semibold text-blue-500 uppercase tracking-wider text-[11px] mt-2">Справжнє ім'я:</p>
-          <p className="text-base font-bold text-zinc-300">
-            {player.real_name} {player.real_surname}
-          </p>
+          {/* Блок із закритими справжніми даними */}
+          <div className="p-4 bg-zinc-900/40 rounded-2xl border border-white/5 space-y-1">
+            <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">Справжнє Ім'я та Прізвище</p>
+            <p className="text-zinc-300 font-bold text-base">
+              {player.real_name || 'Не вказано'} {player.real_surname || ''}
+            </p>
+          </div>
         </div>
 
-        <div className="w-full border-t border-white/5 pt-4 text-center">
-          <span className="text-xl font-black font-mono text-white">{player.elo ?? 1000}</span>
-          <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">Рейтинг ELO</p>
+        {/* СТАТИСТИКА ELO РЕЙТИНГУ */}
+        <div className="w-full flex justify-around items-center pt-2 border-t border-white/5">
+          <div className="text-center">
+            <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider">Рейтинг</p>
+            <p className="text-2xl font-black text-white font-mono mt-0.5">{player.elo ?? 1000}</p>
+          </div>
+          
+          <div className="h-8 w-[1px] bg-white/5"></div>
+          
+          <div className="text-center flex flex-col items-center">
+            <Trophy size={20} className="text-yellow-500" />
+            <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider mt-1">Гравець</p>
+          </div>
         </div>
+
       </div>
     </div>
   );
