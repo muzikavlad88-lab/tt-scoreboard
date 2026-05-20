@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation'; // Імпортуємо роутер для переходу
 import { Trophy, Award, Search, User } from 'lucide-react';
 
 export default function PlayersRatingPage() {
+  const router = useRouter(); // Ініціалізуємо роутер
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -12,7 +14,7 @@ export default function PlayersRatingPage() {
   useEffect(() => {
     const fetchRating = async () => {
       try {
-        // Завантажуємо профілі, відсортовані за рейтингом Elo від більшого до меншого
+        // Завантажуємо профілі, відсортовані за рейтингом Elo
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -30,9 +32,9 @@ export default function PlayersRatingPage() {
     fetchRating();
   }, []);
 
-  // Фільтрація гравців через пошуковий рядок
+  // Фільтрація гравців за нікнеймом
   const filteredProfiles = profiles.filter(p => 
-    (p.name || p.nickname || '').toLowerCase().includes(searchQuery.toLowerCase())
+    (p.nickname || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (loading) {
@@ -53,7 +55,7 @@ export default function PlayersRatingPage() {
         <Search className="absolute left-3 top-3.5 text-zinc-600" size={18} />
         <input 
           type="text" 
-          placeholder="Знайти гравця за іменем..." 
+          placeholder="Знайти гравця за нікнеймом..." 
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
           className="w-full bg-zinc-950 border border-white/5 text-white rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition h-12"
@@ -67,7 +69,6 @@ export default function PlayersRatingPage() {
           <p className="text-xs text-zinc-600 text-center py-10">Гравців не знайдено</p>
         ) : (
           filteredProfiles.map((player, index) => {
-            // Визначаємо медалі для ТОП-3 за індексом масиву
             const isFirst = index === 0;
             const isSecond = index === 1;
             const isThird = index === 2;
@@ -75,9 +76,11 @@ export default function PlayersRatingPage() {
             return (
               <div 
                 key={player.id} 
-                className={`bg-zinc-950 border p-4 rounded-xl flex items-center justify-between transition-all ${
-                  isFirst ? 'border-yellow-500/30 bg-gradient-to-r from-zinc-950 to-yellow-500/5' : 'border-white/5'
+                onClick={() => router.push(`/players/${player.id}`)} // ФІКС: Клік переводить на сторінку імені
+                className={`cursor-pointer active:scale-[0.98] bg-zinc-950 border p-4 rounded-xl flex items-center justify-between transition-all ${
+                  isFirst ? 'border-yellow-500/30 bg-gradient-to-r from-zinc-950 to-yellow-500/5' : 'border-white/5 hover:border-white/10'
                 }`}
+                style={{ WebkitTapHighlightColor: 'transparent' }}
               >
                 <div className="flex items-center gap-4">
                   
@@ -102,13 +105,13 @@ export default function PlayersRatingPage() {
                     )}
                   </div>
 
-                  {/* ІМ'Я ТА ФІРМОВІ СТАТУСИ */}
+                  {/* ВІДОБРАЖЕННЯ НІКНЕЙМУ ТА СТАТУСІВ */}
                   <div className="flex flex-col">
                     <span className="text-sm font-bold text-white tracking-wide">
-                      {player.nickname || player.name || 'Анонімний гравець'}
+                      @{player.nickname || 'Anonym'}
                     </span>
                     
-                    {/* Логіка статусів: 1, 2, 3 місця та пусті інші */}
+                    {/* Статуси лідерів */}
                     {index === 0 && (
                       <span className="text-blue-500 text-[9px] uppercase font-black tracking-widest mt-0.5">
                         Leader 🔥
