@@ -10,25 +10,32 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
-    const checkUser = async () => {
-      // Питаємо в бази даних, чи є активна сесія в браузері
-      const { data: { session } } = await supabase.auth.getSession();
+    // Якщо це внутрішня сторінка Next.js або сторінка 404, пропускаємо її без перевірок
+    if (pathname?.startsWith('/_') || pathname === '/_not-found') {
+      setIsAuthorized(true);
+      return;
+    }
 
-      if (!session && pathname !== '/login') {
-        // Якщо сесії немає і ми не на сторінці логіну — виганяємо на логін
-        router.push('/login');
-      } else if (session && pathname === '/login') {
-        // Якщо сесія є, але людина зайшла на логін — кидаємо на головну
-        router.push('/');
-      } else {
-        // У всіх інших випадках — пропускаємо
-        setIsAuthorized(true);
+    const checkUser = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session && pathname !== '/login') {
+          router.push('/login');
+        } else if (session && pathname === '/login') {
+          router.push('/');
+        } else {
+          setIsAuthorized(true);
+        }
+      } catch (err) {
+        console.error("Auth check failed:", err);
+        // Дозволяємо рендер, якщо щось пішло не так під час білду
+        setIsAuthorized(true); 
       }
     };
 
     checkUser();
 
-    // Слухач на випадок, якщо користувач натисне "Вийти" або щойно зареєструється
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session && pathname !== '/login') {
         router.push('/login');
@@ -41,8 +48,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => authListener.subscription.unsubscribe();
   }, [pathname, router]);
 
-  // Поки перевіряємо, показуємо чорний екран з лоадером (щоб не блимав прихований контент)
-  if (!isAuthorized && pathname !== '/login') {
+  // Якщо це логін або системна сторінка — показуємо відразу
+  if (pathname === '/login' || pathname?.startsWith('/_') || pathname === '/_not-found') {
+    return <>{children}</>;
+  }
+
+  // Показуємо лоадер під час перевірки реальних сторінок
+  if (!isAuthorized) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
         <Loader2 className="animate-spin text-blue-500" size={40} />
@@ -50,6 +62,5 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Якщо все ок — показуємо сторінку
   return <>{children}</>;
 }
