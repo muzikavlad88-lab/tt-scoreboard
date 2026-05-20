@@ -113,7 +113,7 @@ export default function TournamentsPage() {
                 <label className="text-[10px] uppercase tracking-[0.2em] text-blue-500 font-bold ml-1">Назва івенту</label>
                 <input 
                   type="text" 
-                  placeholder="Напр: ЧДТУ Cup 2026"
+                  placeholder="ADDWISE TOURNAMENT 2026"
                   value={newTournamentName}
                   onChange={(e) => setNewTournamentName(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 outline-none text-white focus:border-blue-500 focus:bg-white/10 transition-all"
