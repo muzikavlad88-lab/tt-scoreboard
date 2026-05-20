@@ -1,25 +1,27 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import AuthGuard from "./AuthGuard"; // <-- Підключаємо нашого охоронця
+
+const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
 export const metadata: Metadata = {
   title: "TT Scoreboard",
-  description: "Professional Tournament Management",
+  description: "Рейтинг настільного тенісу ЧДТУ",
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <html lang="uk">
-      <body className="bg-black text-white antialiased">
-        <Sidebar />
-        {/* Контейнер 9:16 */}
-        <div className="min-h-screen max-w-[450px] mx-auto bg-[#050505] border-x border-white/5 relative shadow-2xl">
+      <body className={inter.className}>
+        {/* Обертаємо весь додаток */}
+        <AuthGuard>
           {children}
-        </div>
+        </AuthGuard>
       </body>
     </html>
   );
