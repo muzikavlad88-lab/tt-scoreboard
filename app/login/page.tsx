@@ -52,7 +52,7 @@ export default function LoginPage() {
             {isRegister ? 'Реєстрація' : 'Авторизація'}
           </h1>
           <p className="text-gray-500 text-xs mt-2 uppercase tracking-widest">
-            {isRegister ? 'Створи акаунт для гри в ЧDТУ' : 'Вхід до системи TT Scoreboard'}
+            {isRegister ? '' : 'Вхід до системи TT Scoreboard'}
           </p>
         </div>
 
