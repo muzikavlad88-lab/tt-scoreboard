@@ -1,4 +1,8 @@
 'use client';
+
+// КРИТИЧНИЙ ФІКС ДЛЯ VERCEL: динамічні параметри [id] не будуть ламати білд
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
@@ -13,7 +17,6 @@ export default function LiveMatchPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     const fetchChallenge = async () => {
-      // Завантажуємо виклик з нашої нової таблиці challenges
       const { data } = await supabase
         .from('challenges')
         .select('*, challenger:challenger_id(name, nickname), defender:defender_id(name, nickname)')
@@ -30,11 +33,11 @@ export default function LiveMatchPage({ params }: { params: { id: string } }) {
     fetchChallenge();
   }, [params.id]);
 
-  // Логіка рахунку настільного тенісу: граємо до 11, або перевага у 2 очки (баланс)
   const checkMatchStatus = async (s1: number, s2: number, currentMatch: any) => {
     const p1Name = currentMatch.challenger.nickname || currentMatch.challenger.name || 'Гравець 1';
     const p2Name = currentMatch.defender.nickname || currentMatch.defender.name || 'Гравець 2';
 
+    // Логіка: гра до 11, але якщо 10:10, то до переваги у 2 очки
     if (s1 >= 11 && (s1 - s2) >= 2) {
       setIsFinished(true);
       setWinner(p1Name);
@@ -46,7 +49,6 @@ export default function LiveMatchPage({ params }: { params: { id: string } }) {
     }
   };
 
-  // Автоматичний запис результату при фінальному тапі
   const autoSaveMatch = async (finalScore1: number, finalScore2: number) => {
     await supabase
       .from('challenges')
@@ -64,7 +66,6 @@ export default function LiveMatchPage({ params }: { params: { id: string } }) {
     setScore1(newScore1);
     setScore2(newScore2);
 
-    // Миттєво синхронізуємо live-рахунок з базою даних
     await supabase
       .from('challenges')
       .update({ score1: newScore1, score2: newScore2 })
@@ -98,10 +99,9 @@ export default function LiveMatchPage({ params }: { params: { id: string } }) {
         <h1 className="text-xs text-zinc-500 mb-8 tracking-widest uppercase font-bold">Прямий Ефір Матчу 🏓</h1>
       )}
       
-      {/* КЛІКАБЕЛЬНЕ МОБІЛЬНЕ ТАБЛО */}
       <div className="flex items-center justify-around w-full max-w-sm bg-zinc-950 p-6 rounded-2xl border border-white/5 shadow-2xl">
         
-        {/* Ініціатор */}
+        {/* Гравець 1 */}
         <div className="flex flex-col items-center w-1/2">
           <span className="text-xs font-bold mb-4 text-center truncate w-full px-1 text-zinc-400">
             {name1}
@@ -130,7 +130,7 @@ export default function LiveMatchPage({ params }: { params: { id: string } }) {
 
         <div className="text-xl text-zinc-800 font-light select-none">:</div>
 
-        {/* Захисник */}
+        {/* Гравець 2 */}
         <div className="flex flex-col items-center w-1/2">
           <span className="text-xs font-bold mb-4 text-center truncate w-full px-1 text-zinc-400">
             {name2}
