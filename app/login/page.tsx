@@ -24,8 +24,8 @@ function AuthFormComponent() {
 
     try {
       if (isSignUp) {
-        // РЕЄСТРАЦІЯ
-        const { error } = await supabase.auth.signUp({
+        // 1. РЕЄСТРАЦІЯ У СИСТЕМІ AUTH
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -37,8 +37,25 @@ function AuthFormComponent() {
           }
         });
         if (error) throw error;
+
+        // 2. ПІДСТРАХУВАЛЬНИЙ ПРЯМИЙ ЗАПИС У ТАБЛИЦЮ PROFILES
+        if (data?.user) {
+          await supabase
+            .from('profiles')
+            .upsert({
+              id: data.user.id,
+              nickname: nickname.trim(),
+              real_name: realName.trim(),
+              real_surname: realSurname.trim(),
+              elo: 1000,
+              role: 'user'
+            });
+        }
+
         alert('Акаунт створено успішно! Тепер увійдіть під своїми даними.');
         setIsSignUp(false);
+        // Очищення полів
+        setNickname(''); setRealName(''); setRealSurname(''); setEmail(''); setPassword('');
       } else {
         // ВХІД
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -113,7 +130,7 @@ function AuthFormComponent() {
             </div>
           )}
 
-          {/* ПОЛЯ ДЛЯ ОБОХ РЕЖИМІВ (EMAIL ТА ПАРОЛЬ) */}
+          {/* ПОЛЯ ДЛЯ EMAIL ТА ПАРОЛЮ */}
           <div className="relative">
             <Mail className="absolute left-4 top-4 text-zinc-600" size={18} />
             <input 
@@ -149,7 +166,7 @@ function AuthFormComponent() {
           </button>
         </form>
 
-        {/* ПЕРЕМИКАЧ */}
+        {/* ПЕРЕМИКАЧ РЕЖИМІВ */}
         <div className="text-center pt-4">
           <button 
             onClick={() => {
