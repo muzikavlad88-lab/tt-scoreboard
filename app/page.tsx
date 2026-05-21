@@ -150,9 +150,7 @@ export default function HomePage() {
           elo2 = currentElo2 + team2WinGain;
           elo4 = currentElo4 + team2WinGain;
           elo1 = currentElo1 - actualPenalty;
-          elo3 = currentElo3 - actualPenalty;
-          pointsWon = team2WinGain;
-          pointsLost = actualPenalty;
+          elo3 = currentElo3 - Math.abs(actualPenalty);
         }
 
         await supabase.from('profiles').update({ elo: elo1 }).eq('id', player1Id);
@@ -161,15 +159,20 @@ export default function HomePage() {
         await supabase.from('profiles').update({ elo: elo4 }).eq('id', player4Id);
       }
 
-      await supabase.from('challenges').insert({
-        challenger_id: player1Id,
-        challenger2_id: matchType === '2v2' ? player3Id : null, 
-        defender_id: player2Id,
-        defender2_id: matchType === '2v2' ? player4Id : null,   
-        status: 'completed',
-        score1: winnerTeam === 'team1' ? 11 : 0, 
-        score2: winnerTeam === 'team2' ? 11 : 0
-      });
+      // Загорнуто в ізольований try-catch, щоб помилка історії не ламала загальний процес
+      try {
+        await supabase.from('challenges').insert({
+          challenger_id: player1Id,
+          challenger2_id: matchType === '2v2' ? player3Id : null, 
+          defender_id: player2Id,
+          defender2_id: matchType === '2v2' ? player4Id : null,   
+          status: 'completed',
+          score1: winnerTeam === 'team1' ? 11 : 0, 
+          score2: winnerTeam === 'team2' ? 11 : 0
+        });
+      } catch (historyError) {
+        console.error("Помилка збереження історії матчів:", historyError);
+      }
 
       alert(`Матч збережено! Переможці: +${pointsWon} PTS | Програвші: -${pointsLost} PTS 🏓`);
       
@@ -181,6 +184,8 @@ export default function HomePage() {
 
     } catch (error: any) {
       alert(`Помилка під час збереження результату: ${error.message}`);
+    } catch (historyError) {
+      console.error("Помилка історії:", historyError);
     } finally {
       setIsSaving(false);
     }
