@@ -21,7 +21,6 @@ export default function PublicProfile() {
 
     async function getPlayerAndStats() {
       try {
-        // 1. Отримуємо профіль гравця
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -31,7 +30,6 @@ export default function PublicProfile() {
         if (profileError) throw profileError;
         if (profileData) setPlayer(profileData);
 
-        // 2. Отримуємо ВСІ завершені матчі
         const { data: allMatches, error: matchesError } = await supabase
           .from('challenges')
           .select('*')
@@ -42,7 +40,6 @@ export default function PublicProfile() {
         let wins = 0;
         let losses = 0;
 
-        // 3. Рахуємо статистику з очищенням типів даних
         (allMatches as any[])?.forEach(match => {
           const ch1 = match.challenger_id?.toLowerCase();
           const ch2 = match.challenger2_id?.toLowerCase();
@@ -56,17 +53,11 @@ export default function PublicProfile() {
           const score2 = Number(match.score2 ?? 0);
 
           if (isChallengerTeam) {
-            if (score1 > score2) {
-              wins++;
-            } else {
-              losses++;
-            }
+            if (score1 > score2) wins++;
+            else losses++;
           } else if (isDefenderTeam) {
-            if (score2 > score1) {
-              wins++;
-            } else {
-              losses++;
-            }
+            if (score2 > score1) wins++;
+            else losses++;
           }
         });
 

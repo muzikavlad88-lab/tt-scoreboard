@@ -142,7 +142,7 @@ export default function HomePage() {
           elo1 = currentElo1 + team1WinGain;
           elo3 = currentElo3 + team1WinGain;
           elo2 = currentElo2 - actualPenalty;
-          elo4 = currentElo4 - rentalPenalty;
+          elo4 = currentElo4 - actualPenalty;
           pointsWon = team1WinGain;
           pointsLost = actualPenalty;
         } else {
