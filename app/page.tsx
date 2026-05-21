@@ -150,7 +150,9 @@ export default function HomePage() {
           elo2 = currentElo2 + team2WinGain;
           elo4 = currentElo4 + team2WinGain;
           elo1 = currentElo1 - actualPenalty;
-          elo3 = currentElo3 - Math.abs(actualPenalty);
+          elo3 = currentElo3 - actualPenalty;
+          pointsWon = team2WinGain;
+          pointsLost = actualPenalty;
         }
 
         await supabase.from('profiles').update({ elo: elo1 }).eq('id', player1Id);
@@ -159,9 +161,8 @@ export default function HomePage() {
         await supabase.from('profiles').update({ elo: elo4 }).eq('id', player4Id);
       }
 
-      // Загорнуто в ізольований try-catch, щоб помилка історії не ламала загальний процес
       try {
-        await supabase.from('challenges').insert({
+        const matchPayload: any = {
           challenger_id: player1Id,
           challenger2_id: matchType === '2v2' ? player3Id : null, 
           defender_id: player2Id,
@@ -169,12 +170,13 @@ export default function HomePage() {
           status: 'completed',
           score1: winnerTeam === 'team1' ? 11 : 0, 
           score2: winnerTeam === 'team2' ? 11 : 0
-        });
+        };
+        await supabase.from('challenges').insert(matchPayload);
       } catch (historyError) {
         console.error("Помилка збереження історії матчів:", historyError);
       }
 
-      alert(`Матч збережено! Переможці: +${pointsWon} PTS | Програвші: -${pointsLost} PTS 🏓`);
+      alert(`Матч збережено! Переможці: +${pointsWon} PTS | Програвші: -${pointsLost} PTS 📓`);
       
       setIsModalOpen(false);
       setPlayer1Id(''); setPlayer2Id(''); setPlayer3Id(''); setPlayer4Id('');
@@ -184,8 +186,6 @@ export default function HomePage() {
 
     } catch (error: any) {
       alert(`Помилка під час збереження результату: ${error.message}`);
-    } catch (historyError) {
-      console.error("Помилка історії:", historyError);
     } finally {
       setIsSaving(false);
     }

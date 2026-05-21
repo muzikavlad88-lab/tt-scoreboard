@@ -38,7 +38,7 @@ export default function PublicProfile() {
         let wins = 0;
         let losses = 0;
 
-        allMatches?.forEach(match => {
+        (allMatches as any[])?.forEach(match => {
           const isChallengerTeam = match.challenger_id === playerId || match.challenger2_id === playerId;
           const isDefenderTeam = match.defender_id === playerId || match.defender2_id === playerId;
 
