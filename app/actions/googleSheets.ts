@@ -2,14 +2,7 @@
 
 import { google } from 'googleapis';
 
-export async function appendMatchToSheet(matchData: {
-  matchType: string;
-  p1: string;
-  p2: string;
-  p3?: string;
-  p4?: string;
-  winner: string;
-}) {
+export async function appendMatchToSheet(matchData: any) {
   try {
     const auth = new google.auth.JWT(
       process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -22,7 +15,6 @@ export async function appendMatchToSheet(matchData: {
 
     const ukraineTime = new Date().toLocaleString('uk-UA', { timeZone: 'Europe/Kyiv' });
 
-    // Формуємо рядок для таблиці згідно з нашою структурою
     const row = [
       ukraineTime,
       matchData.matchType,
@@ -35,7 +27,7 @@ export async function appendMatchToSheet(matchData: {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.GOOGLE_SHEET_ID,
-      range: 'Sheet1!A:G', // Переконайся, що вкладка називається Sheet1 або замініть на свою назву
+      range: 'Sheet1!A:G', 
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [row],
