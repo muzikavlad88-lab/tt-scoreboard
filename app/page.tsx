@@ -92,7 +92,6 @@ export default function HomePage() {
         winnerText = winnerTeam === 'team1' ? `Пара ${p1Nickname} + ${p3Nickname}` : `Пара ${p2Nickname} + ${p4Nickname}`;
       }
 
-      // 1. ВІДПРАВКА В GOOGLE ТАБЛИЦІ
       const googleResult = await appendMatchToSheet({
         matchType,
         p1: p1Nickname,
@@ -106,7 +105,6 @@ export default function HomePage() {
         console.error('Не вдалося записати в Google Таблиці, але продовжуємо оновлення ELO...');
       }
 
-      // 2. РОЗРАХУНОК ТА ОНОВЛЕННЯ ELO РЕЙТИНГУ В SUPABASE
       const currentElo1 = Number(p1Obj.elo ?? 1000);
       const currentElo2 = Number(p2Obj.elo ?? 1000);
       const currentElo3 = matchType === '2v2' ? Number(p3Obj.elo ?? 1000) : 1000;
