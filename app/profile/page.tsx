@@ -3,30 +3,36 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, Camera, ShieldAlert, Swords, Target, TrendingUp, TrendingDown } from 'lucide-react';
+import { User, Camera, ShieldAlert, Swords, Target, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchProfile();
   }, []);
 
   async function fetchProfile() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      // Запит безпосередньо витягує всі оновлені поля профілю користувача
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      if (error) {
-        console.error("Помилка отримання даних профілю:", error);
+    setIsRefreshing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Робимо чистий запит безпосередньо до таблиці profiles
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        if (error) throw error;
+        setProfile(data);
       }
-      setProfile(data);
+    } catch (error: any) {
+      console.error("Помилка завантаження профілю:", error.message);
+    } finally {
+      setIsRefreshing(false);
     }
   }
 
@@ -57,19 +63,30 @@ export default function ProfilePage() {
     }
   }
 
-  if (!profile) return <div className="p-10 text-center text-zinc-500 font-bold">Завантаження...</div>;
+  if (!profile) return <div className="p-10 text-center text-zinc-500 font-bold animate-pulse">Завантаження профілю...</div>;
 
-  // ОБЧИСЛЕННЯ СТАТИСТИКИ НА ОСНОВІ ДАНИХ З БАЗИ (МАТЧІ ТА ВІНРЕЙТ)
+  // ОБЧИСЛЕННЯ СТАТИСТИКИ
   const totalWins = Number(profile.wins ?? 0);
   const totalLosses = Number(profile.losses ?? 0);
   const totalMatches = totalWins + totalLosses;
   
-  // Класична формула: (Перемоги / Всього матчів) * 100
+  // Формула вінрейту: (Перемоги / Всього матчів) * 100
   const winRate = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
 
   return (
     <div className="p-4 max-w-md mx-auto space-y-6 select-none touch-manipulation pb-24">
-      <h1 className="text-3xl font-black text-white italic uppercase tracking-tight pt-4">Мій Профіль</h1>
+      <div className="flex justify-between items-center pt-4">
+        <h1 className="text-3xl font-black text-white italic uppercase tracking-tight">Мій Профіль</h1>
+        
+        {/* КНОПКА ПРИМУСОВОГО ОНОВЛЕННЯ ДАНИХ З БАЗИ */}
+        <button 
+          onClick={fetchProfile} 
+          disabled={isRefreshing}
+          className="p-3 bg-zinc-950 border border-white/5 text-zinc-400 hover:text-white rounded-2xl active:scale-95 transition-all"
+        >
+          <RefreshCw size={16} className={isRefreshing ? "animate-spin text-blue-500" : ""} />
+        </button>
+      </div>
 
       <div className="bg-zinc-950 border border-white/5 rounded-[30px] p-6 flex flex-col items-center space-y-6 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-blue-600/10 to-transparent"></div>
@@ -104,7 +121,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* БЛОКИ СТАТИСТИКИ (ІГРИ, ВІНРЕЙТ, ПЕРЕМОГИ, ПОРАЗКИ) */}
+      {/* БЛОКИ СТАТИСТИКИ */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-zinc-950 border border-white/5 rounded-[20px] p-4 flex flex-col gap-2 shadow-md">
           <Swords size={18} className="text-zinc-500" />
