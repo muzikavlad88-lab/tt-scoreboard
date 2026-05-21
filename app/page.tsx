@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Trophy, Users, Plus, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { appendMatchToSheet } from '@/app/actions/googleSheets';
 
 export default function HomePage() {
   const router = useRouter();
@@ -74,26 +75,45 @@ export default function HomePage() {
     setIsSaving(true);
 
     try {
-      const p1 = players.find(p => p.id === player1Id) || {};
-      const p2 = players.find(p => p.id === player2Id) || {};
-      const p3 = matchType === '2v2' ? (players.find(p => p.id === player3Id) || {}) : {};
-      const p4 = matchType === '2v2' ? (players.find(p => p.id === player4Id) || {}) : {};
+      const p1Obj = players.find(p => p.id === player1Id) || {};
+      const p2Obj = players.find(p => p.id === player2Id) || {};
+      const p3Obj = matchType === '2v2' ? (players.find(p => p.id === player3Id) || {}) : {};
+      const p4Obj = matchType === '2v2' ? (players.find(p => p.id === player4Id) || {}) : {};
 
-      const currentElo1 = Number(p1.elo ?? 1000);
-      const currentElo2 = Number(p2.elo ?? 1000);
-      const currentElo3 = matchType === '2v2' ? Number(p3.elo ?? 1000) : 1000;
-      const currentElo4 = matchType === '2v2' ? Number(p4.elo ?? 1000) : 1000;
+      const p1Nickname = p1Obj.nickname ? `@${p1Obj.nickname}` : 'Unknown';
+      const p2Nickname = p2Obj.nickname ? `@${p2Obj.nickname}` : 'Unknown';
+      const p3Nickname = matchType === '2v2' && p3Obj.nickname ? `@${p3Obj.nickname}` : '';
+      const p4Nickname = matchType === '2v2' && p4Obj.nickname ? `@${p4Obj.nickname}` : '';
 
-      let side1Rating = 1000;
-      let side2Rating = 1000;
-
+      let winnerText = '';
       if (matchType === '1v1') {
-        side1Rating = currentElo1;
-        side2Rating = currentElo2;
+        winnerText = winnerTeam === 'team1' ? p1Nickname : p2Nickname;
       } else {
-        side1Rating = (currentElo1 + currentElo3) / 2;
-        side2Rating = (currentElo2 + currentElo4) / 2;
+        winnerText = winnerTeam === 'team1' ? `Пара ${p1Nickname} + ${p3Nickname}` : `Пара ${p2Nickname} + ${p4Nickname}`;
       }
+
+      // 1. ВІДПРАВКА В GOOGLE ТАБЛИЦІ
+      const googleResult = await appendMatchToSheet({
+        matchType,
+        p1: p1Nickname,
+        p2: p2Nickname,
+        p3: p3Nickname,
+        p4: p4Nickname,
+        winner: winnerText
+      });
+
+      if (!googleResult.success) {
+        console.error('Не вдалося записати в Google Таблиці, але продовжуємо оновлення ELO...');
+      }
+
+      // 2. РОЗРАХУНОК ТА ОНОВЛЕННЯ ELO РЕЙТИНГУ В SUPABASE
+      const currentElo1 = Number(p1Obj.elo ?? 1000);
+      const currentElo2 = Number(p2Obj.elo ?? 1000);
+      const currentElo3 = matchType === '2v2' ? Number(p3Obj.elo ?? 1000) : 1000;
+      const currentElo4 = matchType === '2v2' ? Number(p4Obj.elo ?? 1000) : 1000;
+
+      let side1Rating = matchType === '1v1' ? currentElo1 : (currentElo1 + currentElo3) / 2;
+      let side2Rating = matchType === '1v1' ? currentElo2 : (currentElo2 + currentElo4) / 2;
 
       const ratingDiff = Math.abs(side1Rating - side2Rating);
       const isSide1Stronger = side1Rating > side2Rating;
@@ -102,63 +122,41 @@ export default function HomePage() {
       let team2WinGain = matchType === '1v1' ? 20 : 25;
 
       if (ratingDiff >= 200) {
-        if (isSide1Stronger) {
-          team1WinGain = 10; 
-          team2WinGain = 30; 
-        } else {
-          team1WinGain = 30; 
-          team2WinGain = 10; 
-        }
+        if (isSide1Stronger) { team1WinGain = 10; team2WinGain = 30; } 
+        else { team1WinGain = 30; team2WinGain = 10; }
       }
 
       let pointsWon = 0;
       let pointsLost = 0;
 
-      let elo1 = currentElo1;
-      let elo2 = currentElo2;
-      let elo3 = currentElo3;
-      let elo4 = currentElo4;
-
       if (matchType === '1v1') {
         if (winnerTeam === 'team1') {
-          const actualPenalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
-          elo1 = currentElo1 + team1WinGain;
-          elo2 = currentElo2 - actualPenalty;
-          pointsWon = team1WinGain;
-          pointsLost = actualPenalty;
+          const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
+          await supabase.from('profiles').update({ elo: currentElo1 + team1WinGain }).eq('id', player1Id);
+          await supabase.from('profiles').update({ elo: currentElo2 - penalty }).eq('id', player2Id);
+          pointsWon = team1WinGain; pointsLost = penalty;
         } else {
-          const actualPenalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
-          elo2 = currentElo2 + team2WinGain;
-          elo1 = currentElo1 - actualPenalty;
-          pointsWon = team2WinGain;
-          pointsLost = actualPenalty;
+          const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
+          await supabase.from('profiles').update({ elo: currentElo2 + team2WinGain }).eq('id', player2Id);
+          await supabase.from('profiles').update({ elo: currentElo1 - penalty }).eq('id', player1Id);
+          pointsWon = team2WinGain; pointsLost = penalty;
         }
-
-        await supabase.from('profiles').update({ elo: elo1 }).eq('id', player1Id);
-        await supabase.from('profiles').update({ elo: elo2 }).eq('id', player2Id);
       } else {
         if (winnerTeam === 'team1') {
-          const actualPenalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
-          elo1 = currentElo1 + team1WinGain;
-          elo3 = currentElo3 + team1WinGain;
-          elo2 = currentElo2 - actualPenalty;
-          elo4 = currentElo4 - actualPenalty;
-          pointsWon = team1WinGain;
-          pointsLost = actualPenalty;
+          const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
+          await supabase.from('profiles').update({ elo: currentElo1 + team1WinGain }).eq('id', player1Id);
+          await supabase.from('profiles').update({ elo: currentElo3 + team1WinGain }).eq('id', player3Id);
+          await supabase.from('profiles').update({ elo: currentElo2 - penalty }).eq('id', player2Id);
+          await supabase.from('profiles').update({ elo: currentElo4 - penalty }).eq('id', player4Id);
+          pointsWon = team1WinGain; pointsLost = penalty;
         } else {
-          const actualPenalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
-          elo2 = currentElo2 + team2WinGain;
-          elo4 = currentElo4 + team2WinGain;
-          elo1 = currentElo1 - actualPenalty;
-          elo3 = currentElo3 - actualPenalty;
-          pointsWon = team2WinGain;
-          pointsLost = actualPenalty;
+          const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
+          await supabase.from('profiles').update({ elo: currentElo2 + team2WinGain }).eq('id', player2Id);
+          await supabase.from('profiles').update({ elo: currentElo4 + team2WinGain }).eq('id', player4Id);
+          await supabase.from('profiles').update({ elo: currentElo1 - penalty }).eq('id', player1Id);
+          await supabase.from('profiles').update({ elo: currentElo3 - penalty }).eq('id', player3Id);
+          pointsWon = team2WinGain; pointsLost = penalty;
         }
-
-        await supabase.from('profiles').update({ elo: elo1 }).eq('id', player1Id);
-        await supabase.from('profiles').update({ elo: elo3 }).eq('id', player3Id);
-        await supabase.from('profiles').update({ elo: elo2 }).eq('id', player2Id);
-        await supabase.from('profiles').update({ elo: elo4 }).eq('id', player4Id);
       }
 
       try {
@@ -172,20 +170,15 @@ export default function HomePage() {
           score2: winnerTeam === 'team2' ? 11 : 0
         };
         await supabase.from('challenges').insert(matchPayload);
-      } catch (historyError) {
-        console.error("Помилка збереження історії матчів:", historyError);
-      }
+      } catch (e) { console.error(e); }
 
-      alert(`Матч збережено! Переможці: +${pointsWon} PTS | Програвші: -${pointsLost} PTS 🏓`);
-      
+      alert(`Матч успішно збережено в Google Таблицю та оновлено ELO! 🏓`);
       setIsModalOpen(false);
-      setPlayer1Id(''); setPlayer2Id(''); setPlayer3Id(''); setPlayer4Id('');
-      setWinnerTeam('');
-      
+      setPlayer1Id(''); setPlayer2Id(''); setPlayer3Id(''); setPlayer4Id(''); setWinnerTeam('');
       window.location.reload();
 
     } catch (error: any) {
-      alert(`Помилка під час збереження результату: ${error.message}`);
+      alert(`Помилка: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
