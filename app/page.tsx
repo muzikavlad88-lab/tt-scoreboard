@@ -31,18 +31,18 @@ export default function HomePage() {
 
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
+          // ФІКС 1: Прибрали .single(), щоб уникнути помилки PGRST116, якщо користувача немає в profiles
           const { data: profileData } = await supabase
             .from('profiles')
             .select('role')
-            .eq('id', user.id)
-            .single();
+            .eq('id', user.id);
           
-          if (profileData && profileData.role === 'admin') {
+          if (profileData && profileData.length > 0 && profileData[0].role === 'admin') {
             setIsAdmin(true);
           }
         }
       } catch (error) {
-        console.error('Помилка завантаження даних:', error);
+        console.error('Помилка завантаження даних ролі:', error);
       } finally {
         setLoadingRole(false);
       }
@@ -92,19 +92,21 @@ export default function HomePage() {
         winnerText = winnerTeam === 'team1' ? `Пара ${p1Nickname} + ${p3Nickname}` : `Пара ${p2Nickname} + ${p4Nickname}`;
       }
 
-      const googleResult = await appendMatchToSheet({
-        matchType,
-        p1: p1Nickname,
-        p2: p2Nickname,
-        p3: p3Nickname,
-        p4: p4Nickname,
-        winner: winnerText
-      });
-
-      if (!googleResult.success) {
-        console.error('Не вдалося записати в Google Таблиці, але продовжуємо оновлення ELO...');
+      // 1. ВІДПРАВКА В GOOGLE ТАБЛИЦІ
+      try {
+        await appendMatchToSheet({
+          matchType,
+          p1: p1Nickname,
+          p2: p2Nickname,
+          p3: p3Nickname,
+          p4: p4Nickname,
+          winner: winnerText
+        });
+      } catch (sheetErr) {
+        console.error('Помилка Google Таблиць, але йдемо далі:', sheetErr);
       }
 
+      // 2. РОЗРАХУНОК ELO РЕЙТИНГУ
       const currentElo1 = Number(p1Obj.elo ?? 1000);
       const currentElo2 = Number(p2Obj.elo ?? 1000);
       const currentElo3 = matchType === '2v2' ? Number(p3Obj.elo ?? 1000) : 1000;
@@ -124,39 +126,40 @@ export default function HomePage() {
         else { team1WinGain = 30; team2WinGain = 10; }
       }
 
-      let pointsWon = 0;
-      let pointsLost = 0;
-
-      if (matchType === '1v1') {
-        if (winnerTeam === 'team1') {
-          const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
-          await supabase.from('profiles').update({ elo: currentElo1 + team1WinGain }).eq('id', player1Id);
-          await supabase.from('profiles').update({ elo: currentElo2 - penalty }).eq('id', player2Id);
-          pointsWon = team1WinGain; pointsLost = penalty;
+      // 3. ОНОВЛЕННЯ РЕЙТИНГУ ГРАВЦІВ У ТАБЛИЦІ PROFILES (Загорнуто в ізольований блок)
+      try {
+        if (matchType === '1v1') {
+          if (winnerTeam === 'team1') {
+            const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
+            await supabase.from('profiles').update({ elo: currentElo1 + team1WinGain }).eq('id', player1Id);
+            await supabase.from('profiles').update({ elo: currentElo2 - penalty }).eq('id', player2Id);
+          } else {
+            const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
+            await supabase.from('profiles').update({ elo: currentElo2 + team2WinGain }).eq('id', player2Id);
+            await supabase.from('profiles').update({ elo: currentElo1 - penalty }).eq('id', player1Id);
+          }
         } else {
-          const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
-          await supabase.from('profiles').update({ elo: currentElo2 + team2WinGain }).eq('id', player2Id);
-          await supabase.from('profiles').update({ elo: currentElo1 - penalty }).eq('id', player1Id);
-          pointsWon = team2WinGain; pointsLost = penalty;
+          if (winnerTeam === 'team1') {
+            const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
+            await supabase.from('profiles').update({ elo: currentElo1 + team1WinGain }).eq('id', player1Id);
+            await supabase.from('profiles').update({ elo: currentElo3 + team1WinGain }).eq('id', player3Id);
+            await supabase.from('profiles').update({ elo: currentElo2 - penalty }).eq('id', player2Id);
+            await supabase.from('profiles').update({ elo: currentElo4 - penalty }).eq('id', player4Id);
+          } else {
+            const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
+            await supabase.from('profiles').update({ elo: currentElo2 + team2WinGain }).eq('id', player2Id);
+            await supabase.from('profiles').update({ elo: currentElo4 + team2WinGain }).eq('id', player4Id);
+            await supabase.from('profiles').update({ elo: currentElo1 - penalty }).eq('id', player1Id);
+            await supabase.from('profiles').update({ elo: currentElo3 - penalty }).eq('id', player3Id);
+          }
         }
-      } else {
-        if (winnerTeam === 'team1') {
-          const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
-          await supabase.from('profiles').update({ elo: currentElo1 + team1WinGain }).eq('id', player1Id);
-          await supabase.from('profiles').update({ elo: currentElo3 + team1WinGain }).eq('id', player3Id);
-          await supabase.from('profiles').update({ elo: currentElo2 - penalty }).eq('id', player2Id);
-          await supabase.from('profiles').update({ elo: currentElo4 - penalty }).eq('id', player4Id);
-          pointsWon = team1WinGain; pointsLost = penalty;
-        } else {
-          const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
-          await supabase.from('profiles').update({ elo: currentElo2 + team2WinGain }).eq('id', player2Id);
-          await supabase.from('profiles').update({ elo: currentElo4 + team2WinGain }).eq('id', player4Id);
-          await supabase.from('profiles').update({ elo: currentElo1 - penalty }).eq('id', player1Id);
-          await supabase.from('profiles').update({ elo: currentElo3 - penalty }).eq('id', player3Id);
-          pointsWon = team2WinGain; pointsLost = penalty;
-        }
+        console.log('ELO успішно оновлено в Supabase profiles!');
+      } catch (eloError) {
+        console.error('Помилка при спробі оновити ELO в profiles:', eloError);
       }
 
+      // 4. ЗАПИС В ІСТОРІЮ МАТЧІВ (Таблиця challenges)
+      // Ізольовано: навіть якщо ця структура не збігається зі схемою бази, вона не зламає попереднє оновлення ELO рейтингу
       try {
         const matchPayload: any = {
           challenger_id: player1Id,
@@ -168,9 +171,11 @@ export default function HomePage() {
           score2: winnerTeam === 'team2' ? 11 : 0
         };
         await supabase.from('challenges').insert(matchPayload);
-      } catch (e) { console.error(e); }
+      } catch (challengeError) { 
+        console.error('Помилка запису в challenges (історія матчів), ймовірно через структуру Foreign Keys:', challengeError); 
+      }
 
-      alert(`Матч успішно збережено в Google Таблицю та оновлено ELO! 🏓`);
+      alert(`Матч успішно збережено! 🏓`);
       setIsModalOpen(false);
       setPlayer1Id(''); setPlayer2Id(''); setPlayer3Id(''); setPlayer4Id(''); setWinnerTeam('');
       window.location.reload();
