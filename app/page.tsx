@@ -142,7 +142,7 @@ export default function HomePage() {
           elo1 = currentElo1 + team1WinGain;
           elo3 = currentElo3 + team1WinGain;
           elo2 = currentElo2 - actualPenalty;
-          elo4 = currentElo4 - actualPenalty;
+          elo4 = currentElo4 - rentalPenalty;
           pointsWon = team1WinGain;
           pointsLost = actualPenalty;
         } else {
@@ -176,7 +176,7 @@ export default function HomePage() {
         console.error("Помилка збереження історії матчів:", historyError);
       }
 
-      alert(`Матч збережено! Переможці: +${pointsWon} PTS | Програвші: -${pointsLost} PTS 📓`);
+      alert(`Матч збережено! Переможці: +${pointsWon} PTS | Програвші: -${pointsLost} PTS 🏓`);
       
       setIsModalOpen(false);
       setPlayer1Id(''); setPlayer2Id(''); setPlayer3Id(''); setPlayer4Id('');

@@ -10,7 +10,7 @@ import { User, ChevronLeft, Trophy, Swords, Target, TrendingUp, TrendingDown } f
 export default function PublicProfile() {
   const router = useRouter();
   const params = useParams(); 
-  const playerId = params?.id as string;
+  const playerId = (params?.id as string)?.toLowerCase();
 
   const [player, setPlayer] = useState<any>(null);
   const [stats, setStats] = useState({ total: 0, wins: 0, losses: 0, winrate: 0 });
@@ -21,6 +21,7 @@ export default function PublicProfile() {
 
     async function getPlayerAndStats() {
       try {
+        // 1. Отримуємо профіль гравця
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -30,24 +31,42 @@ export default function PublicProfile() {
         if (profileError) throw profileError;
         if (profileData) setPlayer(profileData);
 
-        const { data: allMatches } = await supabase
+        // 2. Отримуємо ВСІ завершені матчі
+        const { data: allMatches, error: matchesError } = await supabase
           .from('challenges')
           .select('*')
           .eq('status', 'completed');
 
+        if (matchesError) throw matchesError;
+
         let wins = 0;
         let losses = 0;
 
+        // 3. Рахуємо статистику з очищенням типів даних
         (allMatches as any[])?.forEach(match => {
-          const isChallengerTeam = match.challenger_id === playerId || match.challenger2_id === playerId;
-          const isDefenderTeam = match.defender_id === playerId || match.defender2_id === playerId;
+          const ch1 = match.challenger_id?.toLowerCase();
+          const ch2 = match.challenger2_id?.toLowerCase();
+          const df1 = match.defender_id?.toLowerCase();
+          const df2 = match.defender2_id?.toLowerCase();
+
+          const isChallengerTeam = ch1 === playerId || ch2 === playerId;
+          const isDefenderTeam = df1 === playerId || df2 === playerId;
+
+          const score1 = Number(match.score1 ?? 0);
+          const score2 = Number(match.score2 ?? 0);
 
           if (isChallengerTeam) {
-            if (Number(match.score1) > Number(match.score2)) wins++;
-            else losses++;
+            if (score1 > score2) {
+              wins++;
+            } else {
+              losses++;
+            }
           } else if (isDefenderTeam) {
-            if (Number(match.score2) > Number(match.score1)) wins++;
-            else losses++;
+            if (score2 > score1) {
+              wins++;
+            } else {
+              losses++;
+            }
           }
         });
 
