@@ -16,7 +16,16 @@ export default function ProfilePage() {
   async function fetchProfile() {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      // Запит безпосередньо витягує всі оновлені поля профілю користувача
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      if (error) {
+        console.error("Помилка отримання даних профілю:", error);
+      }
       setProfile(data);
     }
   }
@@ -50,10 +59,12 @@ export default function ProfilePage() {
 
   if (!profile) return <div className="p-10 text-center text-zinc-500 font-bold">Завантаження...</div>;
 
-  // ОБЧИСЛЕННЯ СТАТИСТИКИ НА ОСНОВІ ДАНИХ З БАЗИ
+  // ОБЧИСЛЕННЯ СТАТИСТИКИ НА ОСНОВІ ДАНИХ З БАЗИ (МАТЧІ ТА ВІНРЕЙТ)
   const totalWins = Number(profile.wins ?? 0);
   const totalLosses = Number(profile.losses ?? 0);
   const totalMatches = totalWins + totalLosses;
+  
+  // Класична формула: (Перемоги / Всього матчів) * 100
   const winRate = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
 
   return (
@@ -93,7 +104,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* НОВИЙ БЛОК СТАТИСТИКИ (ІГРИ, ВІНРЕЙТ, ПЕРЕМОГИ, ПОРАЗКИ) */}
+      {/* БЛОКИ СТАТИСТИКИ (ІГРИ, ВІНРЕЙТ, ПЕРЕМОГИ, ПОРАЗКИ) */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-zinc-950 border border-white/5 rounded-[20px] p-4 flex flex-col gap-2 shadow-md">
           <Swords size={18} className="text-zinc-500" />

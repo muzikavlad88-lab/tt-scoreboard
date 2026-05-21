@@ -56,7 +56,7 @@ export async function appendMatchToSheet(matchData: any) {
     const currentElo3 = matchType === '2v2' ? Number(p3Obj.elo ?? 1000) : 1000;
     const currentElo4 = matchType === '2v2' ? Number(p4Obj.elo ?? 1000) : 1000;
 
-    // ЗАХИСТ ВІД NULL: якщо в базі NULL, беремо 0
+    // ЗАХИСТ ВІД NULL: якщо в якійсь клітинці порожньо, примусово беремо нуль
     const wins1 = p1Obj.wins ? Number(p1Obj.wins) : 0;
     const losses1 = p1Obj.losses ? Number(p1Obj.losses) : 0;
     const wins2 = p2Obj.wins ? Number(p2Obj.wins) : 0;
@@ -106,7 +106,7 @@ export async function appendMatchToSheet(matchData: any) {
         await supabaseAdmin.from('profiles').update({ elo: currentElo3 - penalty, losses: losses3 + 1 }).eq('id', player3Id);
       }
     }
-    console.log('Рейтинги, перемоги та поразки успішно оновлено');
+    console.log('Рейтинги, перемоги та поразки успішно оновлено в profiles');
 
     // 3. ЗАПИС В ІСТОРІЮ CHALLENGES
     const matchPayload = {
