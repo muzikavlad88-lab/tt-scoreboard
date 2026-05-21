@@ -82,16 +82,22 @@ export default function HomePage() {
       const p3 = matchType === '2v2' ? players.find(p => p.id === player3Id) : null;
       const p4 = matchType === '2v2' ? players.find(p => p.id === player4Id) : null;
 
+      // Примусово перетворюємо рейтинги в чисті числа (Number), щоб уникнути помилок типу NaN при відніманні
+      const currentElo1 = Number(p1.elo ?? 1000);
+      const currentElo2 = Number(p2.elo ?? 1000);
+      const currentElo3 = p3 ? Number(p3.elo ?? 1000) : 1000;
+      const currentElo4 = p4 ? Number(p4.elo ?? 1000) : 1000;
+
       let ratingW = 1000;
       let ratingL = 1000;
 
-      // Рахуємо середній рейтинг команд (ТУТ ВИПРАВЛЕНО ОДРУКІВКУ)
+      // Рахуємо середній рейтинг команд для формули
       if (matchType === '1v1') {
-        ratingW = winnerTeam === 'team1' ? (p1.elo ?? 1000) : (p2.elo ?? 1000);
-        ratingL = winnerTeam === 'team1' ? (p2.elo ?? 1000) : (p1.elo ?? 1000);
+        ratingW = winnerTeam === 'team1' ? currentElo1 : currentElo2;
+        ratingL = winnerTeam === 'team1' ? currentElo2 : currentElo1;
       } else {
-        const team1Avg = ((p1.elo ?? 1000) + (p3.elo ?? 1000)) / 2;
-        const team2Avg = ((p2.elo ?? 1000) + (p4.elo ?? 1000)) / 2;
+        const team1Avg = (currentElo1 + currentElo3) / 2;
+        const team2Avg = (currentElo2 + currentElo4) / 2;
         ratingW = winnerTeam === 'team1' ? team1Avg : team2Avg;
         ratingL = winnerTeam === 'team1' ? team2Avg : team1Avg;
       }
@@ -100,18 +106,19 @@ export default function HomePage() {
       const expectedW = 1 / (1 + Math.pow(10, (ratingL - ratingW) / 400));
       const gain = Math.round(32 * (1 - expectedW));
 
-      // Оновлюємо Elo в базі даних
+      // Оновлюємо Elo в базі даних (і додаємо, і віднімаємо)
       if (matchType === '1v1') {
-        const elo1 = winnerTeam === 'team1' ? (p1.elo ?? 1000) + gain : (p1.elo ?? 1000) - gain;
-        const elo2 = winnerTeam === 'team2' ? (p2.elo ?? 1000) + gain : (p2.elo ?? 1000) - gain;
+        const elo1 = winnerTeam === 'team1' ? currentElo1 + gain : currentElo1 - gain;
+        const elo2 = winnerTeam === 'team2' ? currentElo2 + gain : currentElo2 - gain;
         
         await supabase.from('profiles').update({ elo: elo1 }).eq('id', p1.id);
         await supabase.from('profiles').update({ elo: elo2 }).eq('id', p2.id);
       } else {
-        const elo1 = winnerTeam === 'team1' ? (p1.elo ?? 1000) + gain : (p1.elo ?? 1000) - gain;
-        const elo3 = winnerTeam === 'team1' ? (p3.elo ?? 1000) + gain : (p3.elo ?? 1000) - gain;
-        const elo2 = winnerTeam === 'team2' ? (p2.elo ?? 1000) + gain : (p2.elo ?? 1000) - gain;
-        const elo4 = winnerTeam === 'team2' ? (p4.elo ?? 1000) + gain : (p4.elo ?? 1000) - gain;
+        // Для режиму 2v2 оновлюємо всіх 4-х гравців
+        const elo1 = winnerTeam === 'team1' ? currentElo1 + gain : currentElo1 - gain;
+        const elo3 = winnerTeam === 'team1' ? currentElo3 + gain : currentElo3 - gain;
+        const elo2 = winnerTeam === 'team2' ? currentElo2 + gain : currentElo2 - gain;
+        const elo4 = winnerTeam === 'team2' ? currentElo4 + gain : currentElo4 - gain;
 
         await supabase.from('profiles').update({ elo: elo1 }).eq('id', p1.id);
         await supabase.from('profiles').update({ elo: elo3 }).eq('id', p3.id);
@@ -119,7 +126,7 @@ export default function HomePage() {
         await supabase.from('profiles').update({ elo: elo4 }).eq('id', p4.id);
       }
 
-      // Зберігаємо запис матчу в історію
+      // Зберігаємо запис матчу в історію таблиці challenges
       await supabase.from('challenges').insert({
         challenger_id: player1Id,
         defender_id: player2Id,
@@ -201,7 +208,7 @@ export default function HomePage() {
               <h2 className="text-xl font-black text-white italic uppercase tracking-tight drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]">
                 Внести результат
               </h2>
-              <p className="text-[9px] text-blue-500 font-bold uppercase tracking-wider mt-1">Панель Адміністратора</p>
+              <p className="text-[9px] text-blue-500 font-bold uppercase tracking-wider mt-1">Панель Администратора</p>
             </div>
 
             <div className="px-6 pb-4 space-y-4">
@@ -240,7 +247,7 @@ export default function HomePage() {
                   <option value="">Обери гравця...</option>
                   {players.map((p: any) => (
                     <option key={p.id} value={p.id}>
-                      @{p.nickname} ({p.elo ?? 1000}) — {p.real_name || ''}
+                      @{p.nickname} ({p.elo ?? 1000}) {p.real_name ? `— ${p.real_name}` : ''}
                     </option>
                   ))}
                 </select>
@@ -254,7 +261,7 @@ export default function HomePage() {
                     <option value="">Обери другого гравця...</option>
                     {players.map((p: any) => (
                       <option key={`p3-${p.id}`} value={p.id} disabled={p.id === player1Id}>
-                        @{p.nickname} ({p.elo ?? 1000})
+                        @{p.nickname} ({p.elo ?? 1000}) {p.real_name ? `— ${p.real_name}` : ''}
                       </option>
                     ))}
                   </select>
@@ -275,7 +282,7 @@ export default function HomePage() {
                   <option value="">Обери гравця...</option>
                   {players.map((p: any) => (
                     <option key={`p2-${p.id}`} value={p.id} disabled={p.id === player1Id || p.id === player3Id}>
-                      @{p.nickname} ({p.elo ?? 1000}) — {p.real_name || ''}
+                      @{p.nickname} ({p.elo ?? 1000}) {p.real_name ? `— ${p.real_name}` : ''}
                     </option>
                   ))}
                 </select>
@@ -289,7 +296,7 @@ export default function HomePage() {
                     <option value="">Обери другого гравця...</option>
                     {players.map((p: any) => (
                       <option key={`p4-${p.id}`} value={p.id} disabled={p.id === player1Id || p.id === player2Id || p.id === player3Id}>
-                        @{p.nickname} ({p.elo ?? 1000})
+                        @{p.nickname} ({p.elo ?? 1000}) {p.real_name ? `— ${p.real_name}` : ''}
                       </option>
                     ))}
                   </select>
