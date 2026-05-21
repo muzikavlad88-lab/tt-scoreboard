@@ -11,7 +11,7 @@ export default function HomePage() {
   const router = useRouter();
   const [players, setPlayers] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false); // Стейт для перевірки адміна
+  const [isAdmin, setIsAdmin] = useState(false); 
   const [loadingRole, setLoadingRole] = useState(true);
   
   // Стани для форми матчу
@@ -27,7 +27,7 @@ export default function HomePage() {
     async function loadInitialData() {
       try {
         // 1. Завантажуємо список усіх гравців
-        const { data: playersData } = await supabase.from('profiles').select('id, nickname, elo').order('nickname');
+        const { data: playersData } = await supabase.from('profiles').select('*').order('nickname');
         if (playersData) setPlayers(playersData);
 
         // 2. Перевіряємо роль поточного користувача
@@ -44,7 +44,7 @@ export default function HomePage() {
           }
         }
       } catch (error) {
-        console.error('Помилка завантаження даних проліфю/ролі:', error);
+        console.error('Помилка завантаження даних:', error);
       } finally {
         setLoadingRole(false);
       }
@@ -53,13 +53,11 @@ export default function HomePage() {
   }, []);
 
   const handleSaveMatch = async () => {
-    // Захист безпеки: перевірка ролі перед виконанням транзакції
     if (!isAdmin) {
       alert('Помилка доступу: Тільки адміністратори можуть записувати матчі!');
       return;
     }
 
-    // Валідація заповнення полів
     if (matchType === '1v1' && (!player1Id || !player2Id || !winnerTeam)) {
       alert('Обери обох гравців та переможця!');
       return;
@@ -87,6 +85,7 @@ export default function HomePage() {
       let ratingW = 1000;
       let ratingL = 1000;
 
+      // Рахуємо середній рейтинг команд (ТУТ ВИПРАВЛЕНО ОДРУКІВКУ)
       if (matchType === '1v1') {
         ratingW = winnerTeam === 'team1' ? (p1.elo ?? 1000) : (p2.elo ?? 1000);
         ratingL = winnerTeam === 'team1' ? (p2.elo ?? 1000) : (p1.elo ?? 1000);
@@ -97,12 +96,15 @@ export default function HomePage() {
         ratingL = winnerTeam === 'team1' ? team2Avg : team1Avg;
       }
 
+      // Формула розрахунку очікування та чистих балів Elo (K = 32)
       const expectedW = 1 / (1 + Math.pow(10, (ratingL - ratingW) / 400));
       const gain = Math.round(32 * (1 - expectedW));
 
+      // Оновлюємо Elo в базі даних
       if (matchType === '1v1') {
         const elo1 = winnerTeam === 'team1' ? (p1.elo ?? 1000) + gain : (p1.elo ?? 1000) - gain;
         const elo2 = winnerTeam === 'team2' ? (p2.elo ?? 1000) + gain : (p2.elo ?? 1000) - gain;
+        
         await supabase.from('profiles').update({ elo: elo1 }).eq('id', p1.id);
         await supabase.from('profiles').update({ elo: elo2 }).eq('id', p2.id);
       } else {
@@ -117,6 +119,7 @@ export default function HomePage() {
         await supabase.from('profiles').update({ elo: elo4 }).eq('id', p4.id);
       }
 
+      // Зберігаємо запис матчу в історію
       await supabase.from('challenges').insert({
         challenger_id: player1Id,
         defender_id: player2Id,
@@ -125,19 +128,16 @@ export default function HomePage() {
         score2: winnerTeam === 'team2' ? 11 : 0
       });
 
-      alert(`Матч збережено адміністратором! Зміна рейтингу: +${gain} / -${gain} PTS 🏓`);
+      alert(`Матч успішно збережено! Зміна рейтингу: +${gain} / -${gain} PTS 🏓`);
       
       setIsModalOpen(false);
-      setPlayer1Id('');
-      setPlayer2Id('');
-      setPlayer3Id('');
-      setPlayer4Id('');
+      setPlayer1Id(''); setPlayer2Id(''); setPlayer3Id(''); setPlayer4Id('');
       setWinnerTeam('');
       
       window.location.reload();
 
     } catch (error: any) {
-      alert(`Помилка під час збереження: ${error.message}`);
+      alert(`Помилка під час збереження результату: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -152,11 +152,11 @@ export default function HomePage() {
         <p className="text-xs text-zinc-500 mt-1">Система автоматичних матчів</p>
       </div>
 
-      {/* ВЕЛИКА КНОПКА ВИКЛИКУ МОДАЛКИ — ПОКАЗУЄТЬСЯ ТІЛЬКИ ДЛЯ АДМІНІВ */}
+      {/* ВЕЛИКА КНОПКА ВИКЛИКУ МОДАЛКИ (ТІЛЬКИ ДЛЯ АДМІНІВ) */}
       {!loadingRole && isAdmin && (
         <button 
           onClick={() => setIsModalOpen(true)}
-          className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-[24px] p-8 flex flex-col items-center justify-center gap-3 transition-all active:scale-95 shadow-[0_0_40px_rgba(37,99,235,0.2)] animate-in fade-in zoom-in-95 duration-300"
+          className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-[24px] p-8 flex flex-col items-center justify-center gap-3 transition-all active:scale-95 shadow-[0_0_40px_rgba(37,99,235,0.2)]"
           style={{ WebkitTapHighlightColor: 'transparent' }}
         >
           <div className="bg-white/20 p-4 rounded-full">
@@ -170,23 +170,21 @@ export default function HomePage() {
       <div className="grid grid-cols-2 gap-4">
         <button 
           onClick={() => router.push('/players')}
-          className="bg-zinc-950 border border-white/5 p-6 rounded-[24px] p-8 flex flex-col items-center gap-2 active:scale-95 transition-all"
+          className="bg-zinc-950 border border-white/5 p-6 rounded-[24px] flex flex-col items-center gap-2 active:scale-95 transition-all"
         >
           <Trophy size={28} className="text-yellow-500" />
           <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Рейтинг</span>
         </button>
         <button 
           onClick={() => router.push('/profile')}
-          className="bg-zinc-950 border border-white/5 p-6 rounded-[24px] p-8 flex flex-col items-center gap-2 active:scale-95 transition-all"
+          className="bg-zinc-950 border border-white/5 p-6 rounded-[24px] flex flex-col items-center gap-2 active:scale-95 transition-all"
         >
           <Users size={28} className="text-blue-500" />
           <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Профіль</span>
         </button>
       </div>
 
-      {/* ========================================= */}
-      {/* МОДАЛЬНЕ ВІКНО ЗАПИСУ МАТЧУ (ДЛЯ АДМІНІВ) */}
-      {/* ========================================= */}
+      {/* МОДАЛЬНЕ ВІКНО ЗАПИСУ МАТЧУ */}
       {isModalOpen && isAdmin && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center z-50 p-4 select-none touch-manipulation overflow-y-auto">
           <div className="bg-zinc-950 border border-white/10 rounded-[30px] w-full max-w-sm overflow-hidden flex flex-col shadow-2xl relative my-auto">
@@ -241,7 +239,9 @@ export default function HomePage() {
                 >
                   <option value="">Обери гравця...</option>
                   {players.map((p: any) => (
-                    <option key={p.id} value={p.id}>@{p.nickname} ({p.elo ?? 1000})</option>
+                    <option key={p.id} value={p.id}>
+                      @{p.nickname} ({p.elo ?? 1000}) — {p.real_name || ''}
+                    </option>
                   ))}
                 </select>
 
@@ -275,7 +275,7 @@ export default function HomePage() {
                   <option value="">Обери гравця...</option>
                   {players.map((p: any) => (
                     <option key={`p2-${p.id}`} value={p.id} disabled={p.id === player1Id || p.id === player3Id}>
-                      @{p.nickname} ({p.elo ?? 1000})
+                      @{p.nickname} ({p.elo ?? 1000}) — {p.real_name || ''}
                     </option>
                   ))}
                 </select>
