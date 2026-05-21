@@ -70,23 +70,24 @@ export default function HomePage() {
     const selectedIds = matchType === '1v1' ? [player1Id, player2Id] : [player1Id, player2Id, player3Id, player4Id];
     const hasDuplicates = new Set(selectedIds).size !== selectedIds.length;
     if (hasDuplicates) {
-      alert('Один і той самий гравець не може бути обраний кілька разів у матчі!');
+      alert('Один і той самий гравець не може быть обраний кілька разів у матчі!');
       return;
     }
 
     setIsSaving(true);
 
     try {
-      const p1 = players.find(p => p.id === player1Id);
-      const p2 = players.find(p => p.id === player2Id);
-      const p3 = matchType === '2v2' ? players.find(p => p.id === player3Id) : null;
-      const p4 = matchType === '2v2' ? players.find(p => p.id === player4Id) : null;
+      // Знаходимо гравців у масиві (захист від undefined через порожній об'єкт || {})
+      const p1 = players.find(p => p.id === player1Id) || {};
+      const p2 = players.find(p => p.id === player2Id) || {};
+      const p3 = matchType === '2v2' ? (players.find(p => p.id === player3Id) || {}) : {};
+      const p4 = matchType === '2v2' ? (players.find(p => p.id === player4Id) || {}) : {};
 
-      // Конвертуємо поточні рейтинги в чисті числа
+      // Примусово перетворюємо рейтинги в чисті числа
       const currentElo1 = Number(p1.elo ?? 1000);
       const currentElo2 = Number(p2.elo ?? 1000);
-      const currentElo3 = p3 ? Number(p3.elo ?? 1000) : 1000;
-      const currentElo4 = p4 ? Number(p4.elo ?? 1000) : 1000;
+      const currentElo3 = matchType === '2v2' ? Number(p3.elo ?? 1000) : 1000;
+      const currentElo4 = matchType === '2v2' ? Number(p4.elo ?? 1000) : 1000;
 
       // Визначаємо базові рейтинги сторін для розрахунку різниці сили
       let side1Rating = 1000;
@@ -105,28 +106,20 @@ export default function HomePage() {
       const isSide1Stronger = side1Rating > side2Rating;
 
       let team1WinGain = matchType === '1v1' ? 20 : 25;
-      let team1LoseCost = matchType === '1v1' ? 20 : 25;
       let team2WinGain = matchType === '1v1' ? 20 : 25;
-      let team2LoseCost = matchType === '1v1' ? 20 : 25;
 
       // Кастомні правила при різниці в 200+ Elo
       if (ratingDiff >= 200) {
         if (isSide1Stronger) {
-          // Сторона 1 сильніша
-          team1WinGain = 10;
-          team1LoseCost = 30;
-          team2WinGain = 30;
-          team2LoseCost = 10;
+          team1WinGain = 10; // Сильний виграв -> отримав мало
+          team2WinGain = 30; // Слабкий виграв -> отримав багато
         } else {
-          // Сторона 2 сильніша
-          team1WinGain = 30;
-          team1LoseCost = 10;
-          team2WinGain = 10;
-          team2LoseCost = 30;
+          team1WinGain = 30; // Слабкий виграв -> отримав багато
+          team2WinGain = 10; // Сильний виграв -> отримав мало
         }
       }
 
-      // Змінні для виведення в алерт
+      // Змінні для виведення в сповіщення
       let pointsWon = 0;
       let pointsLost = 0;
 
@@ -138,43 +131,53 @@ export default function HomePage() {
 
       if (matchType === '1v1') {
         if (winnerTeam === 'team1') {
+          // Якщо різниця >= 200 і сильний (team1) програв, він втрачає 30 (бо team2 отримує 30)
+          const actualPenalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
+          
           elo1 = currentElo1 + team1WinGain;
-          elo2 = currentElo2 - team1WinGain; // програв стільки ж, скільки отримав переможець
+          elo2 = currentElo2 - actualPenalty;
           pointsWon = team1WinGain;
-          pointsLost = team1WinGain;
+          pointsLost = actualPenalty;
         } else {
+          // Якщо різниця >= 200 і сильний (team2) програв, він втрачає 30 (бо team1 отримує 30)
+          const actualPenalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
+
           elo2 = currentElo2 + team2WinGain;
-          elo1 = currentElo1 - team2WinGain; // програв стільки ж, скільки отримав переможець
+          elo1 = currentElo1 - actualPenalty;
           pointsWon = team2WinGain;
-          pointsLost = team2WinGain;
+          pointsLost = actualPenalty;
         }
 
-        // Оновлюємо базу даних для 1v1
-        await supabase.from('profiles').update({ elo: elo1 }).eq('id', p1.id);
-        await supabase.from('profiles').update({ elo: elo2 }).eq('id', p2.id);
+        // Оновлюємо базу даних за прямими ID з форми
+        await supabase.from('profiles').update({ elo: elo1 }).eq('id', player1Id);
+        await supabase.from('profiles').update({ elo: elo2 }).eq('id', player2Id);
       } else {
         // Режим 2v2
         if (winnerTeam === 'team1') {
+          const actualPenalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
+
           elo1 = currentElo1 + team1WinGain;
           elo3 = currentElo3 + team1WinGain;
-          elo2 = currentElo2 - team1WinGain;
-          elo4 = currentElo4 - team1WinGain;
+          elo2 = currentElo2 - actualPenalty;
+          elo4 = currentElo4 - actualPenalty;
           pointsWon = team1WinGain;
-          pointsLost = team1WinGain;
+          pointsLost = actualPenalty;
         } else {
+          const actualPenalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
+
           elo2 = currentElo2 + team2WinGain;
           elo4 = currentElo4 + team2WinGain;
-          elo1 = currentElo1 - team2WinGain;
-          elo3 = currentElo3 - team2WinGain;
+          elo1 = currentElo1 - actualPenalty;
+          elo3 = currentElo3 - actualPenalty;
           pointsWon = team2WinGain;
-          pointsLost = team2WinGain;
+          pointsLost = actualPenalty;
         }
 
-        // Оновлюємо базу даних для всіх 4-х учасників
-        await supabase.from('profiles').update({ elo: elo1 }).eq('id', p1.id);
-        await supabase.from('profiles').update({ elo: elo3 }).eq('id', p3.id);
-        await supabase.from('profiles').update({ elo: elo2 }).eq('id', p2.id);
-        await supabase.from('profiles').update({ elo: elo4 }).eq('id', p4.id);
+        // Оновлюємо базу даних для всіх 4-х учасників за прямими ID з форми
+        await supabase.from('profiles').update({ elo: elo1 }).eq('id', player1Id);
+        await supabase.from('profiles').update({ elo: elo3 }).eq('id', player3Id);
+        await supabase.from('profiles').update({ elo: elo2 }).eq('id', player2Id);
+        await supabase.from('profiles').update({ elo: elo4 }).eq('id', player4Id);
       }
 
       // Зберігаємо запис матчу в таблицю challenges для історії
@@ -330,7 +333,7 @@ export default function HomePage() {
                   onChange={e => { setPlayer2Id(e.target.value); setWinnerTeam(''); }}
                   className="w-full bg-zinc-900 border border-white/5 text-white rounded-xl p-3 text-sm outline-none focus:border-emerald-500 appearance-none h-12"
                 >
-                  <option value="">Обери гравця...</option>
+                  <option value="">Обеri гравця...</option>
                   {players.map((p: any) => (
                     <option key={`p2-${p.id}`} value={p.id} disabled={p.id === player1Id || p.id === player3Id}>
                       @{p.nickname} ({p.elo ?? 1000}) {p.real_name ? `— ${p.real_name}` : ''}
