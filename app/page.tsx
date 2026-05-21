@@ -82,51 +82,102 @@ export default function HomePage() {
       const p3 = matchType === '2v2' ? players.find(p => p.id === player3Id) : null;
       const p4 = matchType === '2v2' ? players.find(p => p.id === player4Id) : null;
 
-      // Примусово перетворюємо рейтинги в чисті числа (Number), щоб уникнути помилок типу NaN при відніманні
+      // Конвертуємо поточні рейтинги в чисті числа
       const currentElo1 = Number(p1.elo ?? 1000);
       const currentElo2 = Number(p2.elo ?? 1000);
       const currentElo3 = p3 ? Number(p3.elo ?? 1000) : 1000;
       const currentElo4 = p4 ? Number(p4.elo ?? 1000) : 1000;
 
-      let ratingW = 1000;
-      let ratingL = 1000;
+      // Визначаємо базові рейтинги сторін для розрахунку різниці сили
+      let side1Rating = 1000;
+      let side2Rating = 1000;
 
-      // Рахуємо середній рейтинг команд для формули
       if (matchType === '1v1') {
-        ratingW = winnerTeam === 'team1' ? currentElo1 : currentElo2;
-        ratingL = winnerTeam === 'team1' ? currentElo2 : currentElo1;
+        side1Rating = currentElo1;
+        side2Rating = currentElo2;
       } else {
-        const team1Avg = (currentElo1 + currentElo3) / 2;
-        const team2Avg = (currentElo2 + currentElo4) / 2;
-        ratingW = winnerTeam === 'team1' ? team1Avg : team2Avg;
-        ratingL = winnerTeam === 'team1' ? team2Avg : team1Avg;
+        side1Rating = (currentElo1 + currentElo3) / 2;
+        side2Rating = (currentElo2 + currentElo4) / 2;
       }
 
-      // Формула розрахунку очікування та чистих балів Elo (K = 32)
-      const expectedW = 1 / (1 + Math.pow(10, (ratingL - ratingW) / 400));
-      const gain = Math.round(32 * (1 - expectedW));
+      // Розрахунок різниці та визначення значень нарахування/зняття очок
+      const ratingDiff = Math.abs(side1Rating - side2Rating);
+      const isSide1Stronger = side1Rating > side2Rating;
 
-      // Оновлюємо Elo в базі даних (і додаємо, і віднімаємо)
+      let team1WinGain = matchType === '1v1' ? 20 : 25;
+      let team1LoseCost = matchType === '1v1' ? 20 : 25;
+      let team2WinGain = matchType === '1v1' ? 20 : 25;
+      let team2LoseCost = matchType === '1v1' ? 20 : 25;
+
+      // Кастомні правила при різниці в 200+ Elo
+      if (ratingDiff >= 200) {
+        if (isSide1Stronger) {
+          // Сторона 1 сильніша
+          team1WinGain = 10;
+          team1LoseCost = 30;
+          team2WinGain = 30;
+          team2LoseCost = 10;
+        } else {
+          // Сторона 2 сильніша
+          team1WinGain = 30;
+          team1LoseCost = 10;
+          team2WinGain = 10;
+          team2LoseCost = 30;
+        }
+      }
+
+      // Змінні для виведення в алерт
+      let pointsWon = 0;
+      let pointsLost = 0;
+
+      // Розрахунок нових значень
+      let elo1 = currentElo1;
+      let elo2 = currentElo2;
+      let elo3 = currentElo3;
+      let elo4 = currentElo4;
+
       if (matchType === '1v1') {
-        const elo1 = winnerTeam === 'team1' ? currentElo1 + gain : currentElo1 - gain;
-        const elo2 = winnerTeam === 'team2' ? currentElo2 + gain : currentElo2 - gain;
-        
+        if (winnerTeam === 'team1') {
+          elo1 = currentElo1 + team1WinGain;
+          elo2 = currentElo2 - team1WinGain; // програв стільки ж, скільки отримав переможець
+          pointsWon = team1WinGain;
+          pointsLost = team1WinGain;
+        } else {
+          elo2 = currentElo2 + team2WinGain;
+          elo1 = currentElo1 - team2WinGain; // програв стільки ж, скільки отримав переможець
+          pointsWon = team2WinGain;
+          pointsLost = team2WinGain;
+        }
+
+        // Оновлюємо базу даних для 1v1
         await supabase.from('profiles').update({ elo: elo1 }).eq('id', p1.id);
         await supabase.from('profiles').update({ elo: elo2 }).eq('id', p2.id);
       } else {
-        // Для режиму 2v2 оновлюємо всіх 4-х гравців
-        const elo1 = winnerTeam === 'team1' ? currentElo1 + gain : currentElo1 - gain;
-        const elo3 = winnerTeam === 'team1' ? currentElo3 + gain : currentElo3 - gain;
-        const elo2 = winnerTeam === 'team2' ? currentElo2 + gain : currentElo2 - gain;
-        const elo4 = winnerTeam === 'team2' ? currentElo4 + gain : currentElo4 - gain;
+        // Режим 2v2
+        if (winnerTeam === 'team1') {
+          elo1 = currentElo1 + team1WinGain;
+          elo3 = currentElo3 + team1WinGain;
+          elo2 = currentElo2 - team1WinGain;
+          elo4 = currentElo4 - team1WinGain;
+          pointsWon = team1WinGain;
+          pointsLost = team1WinGain;
+        } else {
+          elo2 = currentElo2 + team2WinGain;
+          elo4 = currentElo4 + team2WinGain;
+          elo1 = currentElo1 - team2WinGain;
+          elo3 = currentElo3 - team2WinGain;
+          pointsWon = team2WinGain;
+          pointsLost = team2WinGain;
+        }
 
+        // Оновлюємо базу даних для всіх 4-х учасників
         await supabase.from('profiles').update({ elo: elo1 }).eq('id', p1.id);
         await supabase.from('profiles').update({ elo: elo3 }).eq('id', p3.id);
         await supabase.from('profiles').update({ elo: elo2 }).eq('id', p2.id);
         await supabase.from('profiles').update({ elo: elo4 }).eq('id', p4.id);
       }
 
-      // Зберігаємо запис матчу в історію таблиці challenges
+      // Зберігаємо запис матчу в таблицю challenges для історії
       await supabase.from('challenges').insert({
         challenger_id: player1Id,
         defender_id: player2Id,
@@ -135,7 +186,7 @@ export default function HomePage() {
         score2: winnerTeam === 'team2' ? 11 : 0
       });
 
-      alert(`Матч успішно збережено! Зміна рейтингу: +${gain} / -${gain} PTS 🏓`);
+      alert(`Матч збережено! Переможці: +${pointsWon} PTS | Програвші: -${pointsLost} PTS 🏓`);
       
       setIsModalOpen(false);
       setPlayer1Id(''); setPlayer2Id(''); setPlayer3Id(''); setPlayer4Id('');
@@ -173,7 +224,7 @@ export default function HomePage() {
         </button>
       )}
 
-      {/* ШВИДКІ КНОПКИ (Рейтинг / Профіль) */}
+      {/* ШВИДКІ КНОПКИ */}
       <div className="grid grid-cols-2 gap-4">
         <button 
           onClick={() => router.push('/players')}
@@ -208,7 +259,7 @@ export default function HomePage() {
               <h2 className="text-xl font-black text-white italic uppercase tracking-tight drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]">
                 Внести результат
               </h2>
-              <p className="text-[9px] text-blue-500 font-bold uppercase tracking-wider mt-1">Панель Администратора</p>
+              <p className="text-[9px] text-blue-500 font-bold uppercase tracking-wider mt-1">Панель Адміністратора</p>
             </div>
 
             <div className="px-6 pb-4 space-y-4">
