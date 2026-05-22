@@ -1,14 +1,17 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, Camera, ShieldAlert, Swords, Target, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import { User, Camera, ShieldAlert, Swords, Target, TrendingUp, TrendingDown, RefreshCw, Bug } from 'lucide-react';
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [rawJson, setRawJson] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProfile();
@@ -16,21 +19,38 @@ export default function ProfilePage() {
 
   async function fetchProfile() {
     setIsRefreshing(true);
+    setErrorMessage(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // Робимо чистий запит безпосередньо до таблиці profiles
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        
-        if (error) throw error;
-        setProfile(data);
+      // 1. Перевіряємо поточну сесію авторизації
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError) throw new Error(`Помилка авторизації: ${authError.message}`);
+      if (!user) {
+        setErrorMessage("Користувач не авторизований в системі! Зайдіть в акаунт знову.");
+        return;
       }
+
+      // 2. Робимо прямий запит до таблиці profiles
+      const { data, error: dbError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle(); // Використовуємо maybeSingle, щоб не падати при відсутності рядка
+      
+      if (dbError) throw new Error(`Помилка бази даних (Supabase): ${dbError.message}`);
+      
+      if (!data) {
+        setErrorMessage(`Рядок профілю для вашого ID (${user.id}) взагалі не знайдено в таблиці profiles! Перевірте тригер або внесіть користувача вручну.`);
+        setRawJson(JSON.stringify({ user_auth_id: user.id, email: user.email }, null, 2));
+        return;
+      }
+
+      // Зберігаємо сирі дані для діагностичного блоку
+      setRawJson(JSON.stringify(data, null, 2));
+      setProfile(data);
     } catch (error: any) {
-      console.error("Помилка завантаження профілю:", error.message);
+      console.error("Діагностика зафіксувала помилку:", error);
+      setErrorMessage(error.message || "Невідома помилка при завантаженні даних");
     } finally {
       setIsRefreshing(false);
     }
@@ -63,22 +83,49 @@ export default function ProfilePage() {
     }
   }
 
-  if (!profile) return <div className="p-10 text-center text-zinc-500 font-bold animate-pulse">Завантаження профілю...</div>;
+  // ЕКРАН КРИТИЧНОЇ ПОМИЛКИ (Виведеться, якщо Supabase заблокує запит)
+  if (errorMessage) {
+    return (
+      <div className="p-4 max-w-md mx-auto space-y-6 pt-10">
+        <div className="bg-zinc-950 border border-red-500/20 rounded-[30px] p-6 text-center space-y-4 shadow-2xl">
+          <div className="mx-auto w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center text-red-500">
+            <Bug size={24} />
+          </div>
+          <h1 className="text-red-500 text-xl font-black uppercase tracking-tight">Діагностика Помилки</h1>
+          <p className="text-zinc-400 text-xs text-left bg-zinc-900/50 p-4 rounded-xl border border-white/5 font-mono leading-relaxed break-words">
+            {errorMessage}
+          </p>
+          {rawJson && (
+            <div className="text-left space-y-1">
+              <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest pl-1">Технічний контекст:</span>
+              <pre className="text-[10px] text-zinc-500 bg-zinc-900/30 p-3 rounded-lg overflow-x-auto font-mono">
+                {rawJson}
+              </pre>
+            </div>
+          )}
+          <button 
+            onClick={fetchProfile} 
+            className="w-full bg-red-600 text-white p-3.5 rounded-xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all"
+          >
+            Перевірити знову
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  // ОБЧИСЛЕННЯ СТАТИСТИКИ
+  if (!profile) return <div className="p-10 text-center text-zinc-500 font-bold animate-pulse">З'єднання із сервером Supabase...</div>;
+
+  // ОБЧИСЛЕННЯ СТАТИСТИКИ (Захищено через примусовий парсинг у Number)
   const totalWins = Number(profile.wins ?? 0);
   const totalLosses = Number(profile.losses ?? 0);
   const totalMatches = totalWins + totalLosses;
-  
-  // Формула вінрейту: (Перемоги / Всього матчів) * 100
   const winRate = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
 
   return (
     <div className="p-4 max-w-md mx-auto space-y-6 select-none touch-manipulation pb-24">
       <div className="flex justify-between items-center pt-4">
         <h1 className="text-3xl font-black text-white italic uppercase tracking-tight">Мій Профіль</h1>
-        
-        {/* КНОПКА ПРИМУСОВОГО ОНОВЛЕННЯ ДАНИХ З БАЗИ */}
         <button 
           onClick={fetchProfile} 
           disabled={isRefreshing}

@@ -20,7 +20,7 @@ export default function HomePage() {
   const [player2Id, setPlayer2Id] = useState(''); 
   const [player3Id, setPlayer3Id] = useState(''); 
   const [player4Id, setPlayer4Id] = useState(''); 
-  const [winnerTeam, setWinnerTeam] = useState<'team1' | 'team2' | ''>('');
+  const [winnerTeam, setWinnerTeam] = useState<'team1' | 'team2' | ''>( '');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -31,7 +31,6 @@ export default function HomePage() {
 
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          // ФІКС 1: Прибрали .single(), щоб уникнути помилки PGRST116, якщо користувача немає в profiles
           const { data: profileData } = await supabase
             .from('profiles')
             .select('role')
@@ -85,6 +84,16 @@ export default function HomePage() {
       const p3Nickname = matchType === '2v2' && p3Obj.nickname ? `@${p3Obj.nickname}` : '';
       const p4Nickname = matchType === '2v2' && p4Obj.nickname ? `@${p4Obj.nickname}` : '';
 
+      // Витягуємо поточну статистику з бази (захист від NULL через Number)
+      const wins1 = Number(p1Obj.wins ?? 0);
+      const losses1 = Number(p1Obj.losses ?? 0);
+      const wins2 = Number(p2Obj.wins ?? 0);
+      const losses2 = Number(p2Obj.losses ?? 0);
+      const wins3 = Number(p3Obj.wins ?? 0);
+      const losses3 = Number(p3Obj.losses ?? 0);
+      const wins4 = Number(p4Obj.wins ?? 0);
+      const losses4 = Number(p4Obj.losses ?? 0);
+
       let winnerText = '';
       if (matchType === '1v1') {
         winnerText = winnerTeam === 'team1' ? p1Nickname : p2Nickname;
@@ -126,40 +135,66 @@ export default function HomePage() {
         else { team1WinGain = 30; team2WinGain = 10; }
       }
 
-      // 3. ОНОВЛЕННЯ РЕЙТИНГУ ГРАВЦІВ У ТАБЛИЦІ PROFILES (Загорнуто в ізольований блок)
-      try {
-        if (matchType === '1v1') {
-          if (winnerTeam === 'team1') {
-            const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
-            await supabase.from('profiles').update({ elo: currentElo1 + team1WinGain }).eq('id', player1Id);
-            await supabase.from('profiles').update({ elo: currentElo2 - penalty }).eq('id', player2Id);
-          } else {
-            const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
-            await supabase.from('profiles').update({ elo: currentElo2 + team2WinGain }).eq('id', player2Id);
-            await supabase.from('profiles').update({ elo: currentElo1 - penalty }).eq('id', player1Id);
-          }
-        } else {
-          if (winnerTeam === 'team1') {
-            const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
-            await supabase.from('profiles').update({ elo: currentElo1 + team1WinGain }).eq('id', player1Id);
-            await supabase.from('profiles').update({ elo: currentElo3 + team1WinGain }).eq('id', player3Id);
-            await supabase.from('profiles').update({ elo: currentElo2 - penalty }).eq('id', player2Id);
-            await supabase.from('profiles').update({ elo: currentElo4 - penalty }).eq('id', player4Id);
-          } else {
-            const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
-            await supabase.from('profiles').update({ elo: currentElo2 + team2WinGain }).eq('id', player2Id);
-            await supabase.from('profiles').update({ elo: currentElo4 + team2WinGain }).eq('id', player4Id);
-            await supabase.from('profiles').update({ elo: currentElo1 - penalty }).eq('id', player1Id);
-            await supabase.from('profiles').update({ elo: currentElo3 - penalty }).eq('id', player3Id);
-          }
-        }
-        console.log('ELO успішно оновлено в Supabase profiles!');
-      } catch (eloError) {
-        console.error('Помилка при спробі оновити ELO в profiles:', eloError);
-      }
+      // 3. ОНОВЛЕННЯ РЕЙТИНГУ ТА СТАТИСТИКИ (WINS / LOSSES / ELO) В SUPABASE
+try {
+  if (matchType === '1v1') {
+    // Беремо поточний 1v1 рейтинг або ставимо 1000
+    const currentElo1 = Number(p1Obj.elo_1v1 ?? 1000);
+    const currentElo2 = Number(p2Obj.elo_1v1 ?? 1000);
+    
+    if (winnerTeam === 'team1') {
+      const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
+      await supabase.from('profiles').update({ 
+        elo_1v1: currentElo1 + team1WinGain, 
+        wins: wins1 + 1, 
+        wins_1v1: Number(p1Obj.wins_1v1 ?? 0) + 1 
+      }).eq('id', player1Id);
+      
+      await supabase.from('profiles').update({ 
+        elo_1v1: currentElo2 - penalty, 
+        losses: losses2 + 1, 
+        losses_1v1: Number(p2Obj.losses_1v1 ?? 0) + 1 
+      }).eq('id', player2Id);
+    } else {
+      const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
+      await supabase.from('profiles').update({ 
+        elo_1v1: currentElo2 + team2WinGain, 
+        wins: wins2 + 1, 
+        wins_1v1: Number(p2Obj.wins_1v1 ?? 0) + 1 
+      }).eq('id', player2Id);
+      
+      await supabase.from('profiles').update({ 
+        elo_1v1: currentElo1 - penalty, 
+        losses: losses1 + 1, 
+        losses_1v1: Number(p1Obj.losses_1v1 ?? 0) + 1 
+      }).eq('id', player1Id);
+    }
+  } else {
+    // Режим 2v2
+    const currentElo1 = Number(p1Obj.elo_2v2 ?? 1000);
+    const currentElo2 = Number(p2Obj.elo_2v2 ?? 1000);
+    const currentElo3 = Number(p3Obj.elo_2v2 ?? 1000);
+    const currentElo4 = Number(p4Obj.elo_2v2 ?? 1000);
 
+    if (winnerTeam === 'team1') {
+      const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
+      await supabase.from('profiles').update({ elo_2v2: currentElo1 + team1WinGain, wins: wins1 + 1, wins_2v2: Number(p1Obj.wins_2v2 ?? 0) + 1 }).eq('id', player1Id);
+      await supabase.from('profiles').update({ elo_2v2: currentElo3 + team1WinGain, wins: wins3 + 1, wins_2v2: Number(p3Obj.wins_2v2 ?? 0) + 1 }).eq('id', player3Id);
+      await supabase.from('profiles').update({ elo_2v2: currentElo2 - penalty, losses: losses2 + 1, losses_2v2: Number(p2Obj.losses_2v2 ?? 0) + 1 }).eq('id', player2Id);
+      await supabase.from('profiles').update({ elo_2v2: currentElo4 - penalty, losses: losses4 + 1, losses_2v2: Number(p4Obj.losses_2v2 ?? 0) + 1 }).eq('id', player4Id);
+    } else {
+      const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
+      await supabase.from('profiles').update({ elo_2v2: currentElo2 + team2WinGain, wins: wins2 + 1, wins_2v2: Number(p2Obj.wins_2v2 ?? 0) + 1 }).eq('id', player2Id);
+      await supabase.from('profiles').update({ elo_2v2: currentElo4 + team2WinGain, wins: wins4 + 1, wins_2v2: Number(p4Obj.wins_2v2 ?? 0) + 1 }).eq('id', player4Id);
+      await supabase.from('profiles').update({ elo_2v2: currentElo1 - penalty, losses: losses1 + 1, losses_2v2: Number(p1Obj.losses_2v2 ?? 0) + 1 }).eq('id', player1Id);
+      await supabase.from('profiles').update({ elo_2v2: currentElo3 - penalty, losses: losses3 + 1, losses_2v2: Number(p3Obj.losses_2v2 ?? 0) + 1 }).eq('id', player3Id);
+    }
+  }
+  console.log('Рейтинги 1v1 та 2v2 успішно розділено й оновлено!');
+} catch (eloError) {
+  console.error('Помилка при спробі оновити статистику:', eloError);
+}
       // 4. ЗАПИС В ІСТОРІЮ МАТЧІВ (Таблиця challenges)
-      // Ізольовано: навіть якщо ця структура не збігається зі схемою бази, вона не зламає попереднє оновлення ELO рейтингу
       try {
         const matchPayload: any = {
           challenger_id: player1Id,
@@ -172,7 +207,7 @@ export default function HomePage() {
         };
         await supabase.from('challenges').insert(matchPayload);
       } catch (challengeError) { 
-        console.error('Помилка запису в challenges (історія матчів), ймовірно через структуру Foreign Keys:', challengeError); 
+        console.error('Помилка запису в challenges:', challengeError); 
       }
 
       alert(`Матч успішно збережено! 🏓`);
@@ -233,7 +268,7 @@ export default function HomePage() {
 
             <div className="p-6 pb-2 text-center">
               <h2 className="text-xl font-black text-white italic uppercase tracking-tight">Внести результат</h2>
-              <p className="text-[9px] text-blue-500 font-bold uppercase tracking-wider mt-1">Панель Адміністратора</p>
+              <p className="text-[9px] text-blue-500 font-bold uppercase tracking-wider mt-1">Панель Admin</p>
             </div>
 
             <div className="px-6 pb-4 space-y-4">
