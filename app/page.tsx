@@ -84,7 +84,6 @@ export default function HomePage() {
       const p3Nickname = matchType === '2v2' && p3Obj.nickname ? `@${p3Obj.nickname}` : '';
       const p4Nickname = matchType === '2v2' && p4Obj.nickname ? `@${p4Obj.nickname}` : '';
 
-      // Витягуємо поточну статистику з бази (захист від NULL через Number)
       const wins1 = Number(p1Obj.wins ?? 0);
       const losses1 = Number(p1Obj.losses ?? 0);
       const wins2 = Number(p2Obj.wins ?? 0);
@@ -115,11 +114,11 @@ export default function HomePage() {
         console.error('Помилка Google Таблиць, але йдемо далі:', sheetErr);
       }
 
-      // 2. РОЗРАХУНОК ELO РЕЙТИНГУ
-      const currentElo1 = Number(p1Obj.elo ?? 1000);
-      const currentElo2 = Number(p2Obj.elo ?? 1000);
-      const currentElo3 = matchType === '2v2' ? Number(p3Obj.elo ?? 1000) : 1000;
-      const currentElo4 = matchType === '2v2' ? Number(p4Obj.elo ?? 1000) : 1000;
+      // 2. ФІКС РОЗРАХУНКУ ELO РЕЙТИНГУ (ЗВЕРНЕННЯ ДО РЕЖИМНИХ СТОВПЧИКІВ)
+      const currentElo1 = matchType === '1v1' ? Number(p1Obj.elo_1v1 ?? 1000) : Number(p1Obj.elo_2v2 ?? 1000);
+      const currentElo2 = matchType === '1v1' ? Number(p2Obj.elo_1v1 ?? 1000) : Number(p2Obj.elo_2v2 ?? 1000);
+      const currentElo3 = matchType === '2v2' ? Number(p3Obj.elo_2v2 ?? 1000) : 1000;
+      const currentElo4 = matchType === '2v2' ? Number(p4Obj.elo_2v2 ?? 1000) : 1000;
 
       let side1Rating = matchType === '1v1' ? currentElo1 : (currentElo1 + currentElo3) / 2;
       let side2Rating = matchType === '1v1' ? currentElo2 : (currentElo2 + currentElo4) / 2;
@@ -135,65 +134,51 @@ export default function HomePage() {
         else { team1WinGain = 30; team2WinGain = 10; }
       }
 
-      // 3. ОНОВЛЕННЯ РЕЙТИНГУ ТА СТАТИСТИКИ (WINS / LOSSES / ELO) В SUPABASE
-try {
-  if (matchType === '1v1') {
-    // Беремо поточний 1v1 рейтинг або ставимо 1000
-    const currentElo1 = Number(p1Obj.elo_1v1 ?? 1000);
-    const currentElo2 = Number(p2Obj.elo_1v1 ?? 1000);
-    
-    if (winnerTeam === 'team1') {
-      const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
-      await supabase.from('profiles').update({ 
-        elo_1v1: currentElo1 + team1WinGain, 
-        wins: wins1 + 1, 
-        wins_1v1: Number(p1Obj.wins_1v1 ?? 0) + 1 
-      }).eq('id', player1Id);
-      
-      await supabase.from('profiles').update({ 
-        elo_1v1: currentElo2 - penalty, 
-        losses: losses2 + 1, 
-        losses_1v1: Number(p2Obj.losses_1v1 ?? 0) + 1 
-      }).eq('id', player2Id);
-    } else {
-      const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
-      await supabase.from('profiles').update({ 
-        elo_1v1: currentElo2 + team2WinGain, 
-        wins: wins2 + 1, 
-        wins_1v1: Number(p2Obj.wins_1v1 ?? 0) + 1 
-      }).eq('id', player2Id);
-      
-      await supabase.from('profiles').update({ 
-        elo_1v1: currentElo1 - penalty, 
-        losses: losses1 + 1, 
-        losses_1v1: Number(p1Obj.losses_1v1 ?? 0) + 1 
-      }).eq('id', player1Id);
-    }
-  } else {
-    // Режим 2v2
-    const currentElo1 = Number(p1Obj.elo_2v2 ?? 1000);
-    const currentElo2 = Number(p2Obj.elo_2v2 ?? 1000);
-    const currentElo3 = Number(p3Obj.elo_2v2 ?? 1000);
-    const currentElo4 = Number(p4Obj.elo_2v2 ?? 1000);
+      // 3. ОНОВЛЕННЯ РЕЙТИНГУ ТА СТАТИСТИКИ В SUPABASE
+      if (matchType === '1v1') {
+        if (winnerTeam === 'team1') {
+          const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
+          await supabase.from('profiles').update({ 
+            elo_1v1: currentElo1 + team1WinGain, 
+            wins: wins1 + 1, 
+            wins_1v1: Number(p1Obj.wins_1v1 ?? 0) + 1 
+          }).eq('id', player1Id);
+          
+          await supabase.from('profiles').update({ 
+            elo_1v1: currentElo2 - penalty, 
+            losses: losses2 + 1, 
+            losses_1v1: Number(p2Obj.losses_1v1 ?? 0) + 1 
+          }).eq('id', player2Id);
+        } else {
+          const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
+          await supabase.from('profiles').update({ 
+            elo_1v1: currentElo2 + team2WinGain, 
+            wins: wins2 + 1, 
+            wins_1v1: Number(p2Obj.wins_1v1 ?? 0) + 1 
+          }).eq('id', player2Id);
+          
+          await supabase.from('profiles').update({ 
+            elo_1v1: currentElo1 - penalty, 
+            losses: losses1 + 1, 
+            losses_1v1: Number(p1Obj.losses_1v1 ?? 0) + 1 
+          }).eq('id', player1Id);
+        }
+      } else {
+        if (winnerTeam === 'team1') {
+          const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
+          await supabase.from('profiles').update({ elo_2v2: currentElo1 + team1WinGain, wins: wins1 + 1, wins_2v2: Number(p1Obj.wins_2v2 ?? 0) + 1 }).eq('id', player1Id);
+          await supabase.from('profiles').update({ elo_2v2: currentElo3 + team1WinGain, wins: wins3 + 1, wins_2v2: Number(p3Obj.wins_2v2 ?? 0) + 1 }).eq('id', player3Id);
+          await supabase.from('profiles').update({ elo_2v2: currentElo2 - penalty, losses: losses2 + 1, losses_2v2: Number(p2Obj.losses_2v2 ?? 0) + 1 }).eq('id', player2Id);
+          await supabase.from('profiles').update({ elo_2v2: currentElo4 - penalty, losses: losses4 + 1, losses_2v2: Number(p4Obj.losses_2v2 ?? 0) + 1 }).eq('id', player4Id);
+        } else {
+          const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
+          await supabase.from('profiles').update({ elo_2v2: currentElo2 + team2WinGain, wins: wins2 + 1, wins_2v2: Number(p2Obj.wins_2v2 ?? 0) + 1 }).eq('id', player2Id);
+          await supabase.from('profiles').update({ elo_2v2: currentElo4 + team2WinGain, wins: wins4 + 1, wins_2v2: Number(p4Obj.wins_2v2 ?? 0) + 1 }).eq('id', player4Id);
+          await supabase.from('profiles').update({ elo_2v2: currentElo1 - penalty, losses: losses1 + 1, losses_2v2: Number(p1Obj.losses_2v2 ?? 0) + 1 }).eq('id', player1Id);
+          await supabase.from('profiles').update({ elo_2v2: currentElo3 - penalty, losses: losses3 + 1, losses_2v2: Number(p3Obj.losses_2v2 ?? 0) + 1 }).eq('id', player3Id);
+        }
+      }
 
-    if (winnerTeam === 'team1') {
-      const penalty = ratingDiff >= 200 && isSide1Stronger ? 30 : team1WinGain;
-      await supabase.from('profiles').update({ elo_2v2: currentElo1 + team1WinGain, wins: wins1 + 1, wins_2v2: Number(p1Obj.wins_2v2 ?? 0) + 1 }).eq('id', player1Id);
-      await supabase.from('profiles').update({ elo_2v2: currentElo3 + team1WinGain, wins: wins3 + 1, wins_2v2: Number(p3Obj.wins_2v2 ?? 0) + 1 }).eq('id', player3Id);
-      await supabase.from('profiles').update({ elo_2v2: currentElo2 - penalty, losses: losses2 + 1, losses_2v2: Number(p2Obj.losses_2v2 ?? 0) + 1 }).eq('id', player2Id);
-      await supabase.from('profiles').update({ elo_2v2: currentElo4 - penalty, losses: losses4 + 1, losses_2v2: Number(p4Obj.losses_2v2 ?? 0) + 1 }).eq('id', player4Id);
-    } else {
-      const penalty = ratingDiff >= 200 && !isSide1Stronger ? 30 : team2WinGain;
-      await supabase.from('profiles').update({ elo_2v2: currentElo2 + team2WinGain, wins: wins2 + 1, wins_2v2: Number(p2Obj.wins_2v2 ?? 0) + 1 }).eq('id', player2Id);
-      await supabase.from('profiles').update({ elo_2v2: currentElo4 + team2WinGain, wins: wins4 + 1, wins_2v2: Number(p4Obj.wins_2v2 ?? 0) + 1 }).eq('id', player4Id);
-      await supabase.from('profiles').update({ elo_2v2: currentElo1 - penalty, losses: losses1 + 1, losses_2v2: Number(p1Obj.losses_2v2 ?? 0) + 1 }).eq('id', player1Id);
-      await supabase.from('profiles').update({ elo_2v2: currentElo3 - penalty, losses: losses3 + 1, losses_2v2: Number(p3Obj.losses_2v2 ?? 0) + 1 }).eq('id', player3Id);
-    }
-  }
-  console.log('Рейтинги 1v1 та 2v2 успішно розділено й оновлено!');
-} catch (eloError) {
-  console.error('Помилка при спробі оновити статистику:', eloError);
-}
       // 4. ЗАПИС В ІСТОРІЮ МАТЧІВ (Таблиця challenges)
       try {
         const matchPayload: any = {
@@ -300,7 +285,7 @@ try {
                 >
                   <option value="">Обери гравця...</option>
                   {players.map((p: any) => (
-                    <option key={p.id} value={p.id}>@{p.nickname} ({p.elo ?? 1000}) {p.real_name ? `— ${p.real_name}` : ''}</option>
+                    <option key={p.id} value={p.id}>@{p.nickname} ({matchType === '1v1' ? (p.elo_1v1 ?? 1000) : (p.elo_2v2 ?? 1000)} PTS)</option>
                   ))}
                 </select>
 
@@ -313,7 +298,7 @@ try {
                     <option value="">Обери другого гравця...</option>
                     {players.map((p: any) => (
                       <option key={`p3-${p.id}`} value={p.id} disabled={p.id === player1Id}>
-                        @{p.nickname} ({p.elo ?? 1000}) {p.real_name ? `— ${p.real_name}` : ''}
+                        @{p.nickname} ({p.elo_2v2 ?? 1000} PTS)
                       </option>
                     ))}
                   </select>
@@ -332,7 +317,7 @@ try {
                   <option value="">Обери гравця...</option>
                   {players.map((p: any) => (
                     <option key={`p2-${p.id}`} value={p.id} disabled={p.id === player1Id || p.id === player3Id}>
-                      @{p.nickname} ({p.elo ?? 1000}) {p.real_name ? `— ${p.real_name}` : ''}
+                      @{p.nickname} ({matchType === '1v1' ? (p.elo_1v1 ?? 1000) : (p.elo_2v2 ?? 1000)} PTS)
                     </option>
                   ))}
                 </select>
@@ -346,7 +331,7 @@ try {
                     <option value="">Обери другого гравця...</option>
                     {players.map((p: any) => (
                       <option key={`p4-${p.id}`} value={p.id} disabled={p.id === player1Id || p.id === player2Id || p.id === player3Id}>
-                        @{p.nickname} ({p.elo ?? 1000}) {p.real_name ? `— ${p.real_name}` : ''}
+                        @{p.nickname} ({p.elo_2v2 ?? 1000} PTS)
                       </option>
                     ))}
                   </select>
